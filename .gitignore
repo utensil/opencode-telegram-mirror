@@ -1,0 +1,9 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build
+dist/
+
+# Secrets - don't commit telegram credentials
+.opencode/telegram.json
