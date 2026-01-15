@@ -188,6 +188,9 @@ async function main() {
     pollSource: state.updatesUrl ? "Cloudflare DO" : "Telegram API",
     updatesUrl: state.updatesUrl || "(using Telegram API)",
   })
+  
+  // Send ready message to Telegram
+  await telegram.sendMessage("✅ Sandbox is ready! OpenCode is running.")
 }
 
 // =============================================================================
