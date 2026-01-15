@@ -247,17 +247,40 @@ async function main() {
 		updatesUrl: state.updatesUrl || "(using Telegram API)",
 	});
 
-	// Update the pinned status message to show ready state
-	const branchName = process.env.BRANCH_NAME;
-	const attachCmd = branchName ? `\`opencode attach "${branchName}"\`` : "";
-	await updateStatusMessage(
-		telegram,
-		`✅ Ready to work.${attachCmd ? `\n\nConnect with ${attachCmd}` : ""}`
-	);
+	// Signal the worker that we're ready - it will update the status message with tunnel URL
+	const workerWsUrl = process.env.WORKER_WS_URL;
+	if (workerWsUrl && state.chatId && state.threadId) {
+		const workerBaseUrl = workerWsUrl
+			.replace("wss://", "https://")
+			.replace("ws://", "http://")
+			.replace(/\/ws$/, "")
+			.replace(/\/sandbox-ws$/, "");
+		
+		const readyUrl = `${workerBaseUrl}/session-ready`;
+		log("info", "Signaling worker that mirror is ready", { readyUrl });
+		
+		try {
+			const response = await fetch(readyUrl, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					chatId: state.chatId,
+					threadId: state.threadId,
+				}),
+			});
+			log("info", "Worker ready signal response", { 
+				status: response.status,
+				ok: response.ok,
+			});
+		} catch (error) {
+			log("error", "Failed to signal worker", { error: String(error) });
+		}
+	}
 
 	// Send initial prompt to OpenCode if context was provided
 	const initialContext = process.env.INITIAL_CONTEXT;
 	const taskDescription = process.env.TASK_DESCRIPTION;
+	const branchName = process.env.BRANCH_NAME;
 
 	if (initialContext || taskDescription) {
 		log("info", "Sending initial context to OpenCode", {
