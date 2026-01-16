@@ -2,6 +2,7 @@
  * Telegram Bot API client for sending/receiving messages
  */
 
+import { Result, TaggedError } from "better-result"
 import type { LogFn } from "./log"
 
 export interface TelegramConfig {
@@ -71,15 +72,23 @@ interface SendMessageResponse {
 }
 
 // Custom error for fatal Telegram errors (chat not found, etc.)
-export class TelegramFatalError extends Error {
-  constructor(
-    message: string,
-    public code: number
-  ) {
-    super(message)
-    this.name = "TelegramFatalError"
+export class TelegramFatalError extends TaggedError("TelegramFatalError")<{
+  message: string
+  code: number
+  cause?: unknown
+}>() {}
+
+export class TelegramApiError extends TaggedError("TelegramApiError")<{
+  message: string
+  cause: unknown
+}>() {
+  constructor(args: { cause: unknown }) {
+    const causeMessage = args.cause instanceof Error ? args.cause.message : String(args.cause)
+    super({ ...args, message: `Telegram API error: ${causeMessage}` })
   }
 }
+
+export type TelegramResult<T> = Result<T, TelegramFatalError | TelegramApiError>
 
 export interface InlineKeyboardButton {
   text: string
@@ -116,7 +125,7 @@ export class TelegramClient {
       replyMarkup?: InlineKeyboardMarkup
       replyToMessageId?: number
     }
-  ): Promise<TelegramMessage | null> {
+  ): Promise<TelegramResult<TelegramMessage | null>> {
     // Telegram has a 4096 character limit per message
     const maxLength = 4096
     const chunks = this.splitMessage(text, maxLength)
@@ -178,9 +187,11 @@ export class TelegramClient {
           // Check for fatal errors (chat not found, etc.)
           if (data.error_code === 400 && data.description?.includes("chat not found")) {
             this.log("error", "Chat not found - stopping", { chatId: this.chatId, response: data })
-            throw new TelegramFatalError(`Chat not found: ${this.chatId}`, 400)
+            return Result.err(
+              new TelegramFatalError({ message: `Chat not found: ${this.chatId}`, code: 400 })
+            )
           }
-          
+
           this.log("warn", "Markdown failed, retrying without parse_mode", { response: data, text: chunk })
           // Retry without markdown if it fails (markdown can be finicky)
           params.parse_mode = undefined
@@ -192,12 +203,16 @@ export class TelegramClient {
           const retryData = (await retryResponse.json()) as SendMessageResponse
           if (retryData.ok) {
             lastMessage = retryData.result
-            this.log("info", "Message sent successfully (plain text)", { messageId: retryData.result.message_id })
+            this.log("info", "Message sent successfully (plain text)", {
+              messageId: retryData.result.message_id,
+            })
           } else {
             // Check for fatal errors on retry too
             if (retryData.error_code === 400 && retryData.description?.includes("chat not found")) {
               this.log("error", "Chat not found - stopping", { chatId: this.chatId, response: retryData })
-              throw new TelegramFatalError(`Chat not found: ${this.chatId}`, 400)
+              return Result.err(
+                new TelegramFatalError({ message: `Chat not found: ${this.chatId}`, code: 400 })
+              )
             }
             this.log("error", "Failed to send message", { response: retryData })
           }
@@ -207,12 +222,21 @@ export class TelegramClient {
         }
       } catch (error) {
         this.log("error", "Error sending message", { error: String(error) })
+        return Result.err(new TelegramApiError({ cause: error }))
       }
     }
 
-    return lastMessage
-  }
+    if (lastMessage) {
+      return Result.ok(lastMessage)
+    }
 
+    return Result.err(
+      new TelegramApiError({
+        cause: new Error("Failed to send Telegram message"),
+      })
+    )
+  }
+ 
   /**
    * Edit an existing message's text and/or reply markup
    */
@@ -220,7 +244,7 @@ export class TelegramClient {
     messageId: number,
     text: string,
     options?: { replyMarkup?: InlineKeyboardMarkup }
-  ): Promise<boolean> {
+  ): Promise<TelegramResult<boolean>> {
     this.log("debug", "Editing message", { messageId, textLength: text.length })
 
     const params: Record<string, unknown> = {
@@ -254,14 +278,53 @@ export class TelegramClient {
         })
         const retryData = (await retryResponse.json()) as { ok: boolean }
         this.log("debug", "Edit retry result", { messageId, ok: retryData.ok })
-        return retryData.ok
+        return Result.ok(retryData.ok)
       }
 
       this.log("debug", "Message edited successfully", { messageId })
-      return true
+      return Result.ok(true)
     } catch (error) {
       this.log("error", "Error editing message", { messageId, error: String(error) })
-      return false
+      return Result.err(new TelegramApiError({ cause: error }))
+    }
+  }
+
+  /**
+   * Update a forum topic name
+   */
+  async editForumTopic(threadId: number, name: string): Promise<TelegramResult<boolean>> {
+    this.log("debug", "Editing forum topic", { threadId, nameLength: name.length })
+
+    const params: Record<string, unknown> = {
+      chat_id: this.chatId,
+      message_thread_id: threadId,
+      name,
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/editForumTopic`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      })
+
+      const data = (await response.json()) as {
+        ok: boolean
+        result?: boolean
+        error_code?: number
+        description?: string
+      }
+
+      if (!data.ok) {
+        this.log("error", "Failed to edit forum topic", { threadId, response: data })
+        return Result.err(new TelegramApiError({ cause: data.description || "Edit forum topic failed" }))
+      }
+
+      this.log("info", "Forum topic edited", { threadId })
+      return Result.ok(true)
+    } catch (error) {
+      this.log("error", "Error editing forum topic", { threadId, error: String(error) })
+      return Result.err(new TelegramApiError({ cause: error }))
     }
   }
 
@@ -271,7 +334,7 @@ export class TelegramClient {
   async answerCallbackQuery(
     callbackQueryId: string,
     options?: { text?: string; showAlert?: boolean }
-  ): Promise<boolean> {
+  ): Promise<TelegramResult<boolean>> {
     this.log("debug", "Answering callback query", { callbackQueryId, text: options?.text })
 
     const params: Record<string, unknown> = {
@@ -294,17 +357,17 @@ export class TelegramClient {
 
       const data = (await response.json()) as { ok: boolean }
       this.log("debug", "Callback query answered", { ok: data.ok })
-      return data.ok
+      return Result.ok(data.ok)
     } catch (error) {
       this.log("error", "Error answering callback query", { error: String(error) })
-      return false
+      return Result.err(new TelegramApiError({ cause: error }))
     }
   }
 
   /**
    * Get new updates (messages and callback queries) using long polling
    */
-  async getUpdates(timeout = 30): Promise<TelegramUpdate[]> {
+  async getUpdates(timeout = 30): Promise<TelegramResult<TelegramUpdate[]>> {
     try {
       const params = new URLSearchParams({
         offset: String(this.lastUpdateId + 1),
@@ -317,16 +380,25 @@ export class TelegramClient {
 
       if (!data.ok) {
         this.log("error", "Failed to get updates from Telegram API", { response: data })
-        
-        // Throw fatal errors so caller can handle them
+
         if (data.error_code === 409) {
-          throw new TelegramFatalError(data.description || "Conflict", 409)
+          return Result.err(
+            new TelegramFatalError({
+              message: data.description || "Conflict",
+              code: 409,
+            })
+          )
         }
         if (data.error_code === 401) {
-          throw new TelegramFatalError(data.description || "Unauthorized", 401)
+          return Result.err(
+            new TelegramFatalError({
+              message: data.description || "Unauthorized",
+              code: 401,
+            })
+          )
         }
-        
-        return []
+
+        return Result.err(new TelegramApiError({ cause: data.description || "Unknown error" }))
       }
 
       const updates: TelegramUpdate[] = []
@@ -378,10 +450,10 @@ export class TelegramClient {
         matchedUpdates: updates.length,
       })
 
-      return updates
+      return Result.ok(updates)
     } catch (error) {
       this.log("error", "Error getting updates", { error: String(error) })
-      return []
+      return Result.err(new TelegramApiError({ cause: error }))
     }
   }
 
@@ -441,7 +513,7 @@ export class TelegramClient {
   /**
    * Send a single typing action
    */
-  async sendTypingAction(): Promise<void> {
+  async sendTypingAction(): Promise<TelegramResult<void>> {
     const params: Record<string, unknown> = {
       chat_id: this.chatId,
       action: "typing",
@@ -457,21 +529,34 @@ export class TelegramClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(params),
       })
+      return Result.ok(undefined)
     } catch (error) {
       this.log("debug", "Failed to send typing action", { error: String(error) })
+      return Result.err(new TelegramApiError({ cause: error }))
     }
   }
 
   /**
    * Get bot info to verify the token is valid
    */
-  async getMe(): Promise<{ ok: boolean; result?: { id: number; username: string } }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/getMe`)
-      return (await response.json()) as { ok: boolean; result?: { id: number; username: string } }
-    } catch (error) {
-      return { ok: false }
+  async getMe(): Promise<TelegramResult<{ id: number; username: string }>> {
+    const result = await Result.tryPromise({
+      try: async () => {
+        const response = await fetch(`${this.baseUrl}/getMe`)
+        return (await response.json()) as { ok: boolean; result?: { id: number; username: string } }
+      },
+      catch: (error) => new TelegramApiError({ cause: error }),
+    })
+
+    if (result.status === "error") {
+      return Result.err(result.error)
     }
+
+    if (!result.value.ok || !result.value.result) {
+      return Result.err(new TelegramApiError({ cause: "Invalid bot response" }))
+    }
+
+    return Result.ok(result.value.result)
   }
 
   /**
@@ -479,31 +564,36 @@ export class TelegramClient {
    * @param fileId The file_id from a photo/document/etc
    * @returns The file URL, or null on failure
    */
-  async getFileUrl(fileId: string): Promise<string | null> {
+  async getFileUrl(fileId: string): Promise<TelegramResult<string>> {
     this.log("debug", "Getting file info", { fileId })
 
-    try {
-      const response = await fetch(`${this.baseUrl}/getFile?file_id=${encodeURIComponent(fileId)}`)
-      const data = (await response.json()) as {
-        ok: boolean
-        result?: { file_id: string; file_unique_id: string; file_size?: number; file_path?: string }
-        description?: string
-      }
+    const result = await Result.tryPromise({
+      try: async () => {
+        const response = await fetch(`${this.baseUrl}/getFile?file_id=${encodeURIComponent(fileId)}`)
+        return (await response.json()) as {
+          ok: boolean
+          result?: { file_id: string; file_unique_id: string; file_size?: number; file_path?: string }
+          description?: string
+        }
+      },
+      catch: (error) => new TelegramApiError({ cause: error }),
+    })
 
-      if (!data.ok || !data.result?.file_path) {
-        this.log("error", "Failed to get file info", { response: data })
-        return null
-      }
-
-      // Construct the download URL
-      // Format: https://api.telegram.org/file/bot<token>/<file_path>
-      const downloadUrl = `${this.baseUrl.replace("/bot", "/file/bot")}/${data.result.file_path}`
-      this.log("debug", "Got file URL", { fileId, filePath: data.result.file_path })
-      return downloadUrl
-    } catch (error) {
-      this.log("error", "Error getting file URL", { fileId, error: String(error) })
-      return null
+    if (result.status === "error") {
+      this.log("error", "Error getting file URL", { fileId, error: result.error.message })
+      return Result.err(result.error)
     }
+
+    if (!result.value.ok || !result.value.result?.file_path) {
+      this.log("error", "Failed to get file info", { response: result.value })
+      return Result.err(new TelegramApiError({ cause: result.value.description || "Invalid file info" }))
+    }
+
+    // Construct the download URL
+    // Format: https://api.telegram.org/file/bot<token>/<file_path>
+    const downloadUrl = `${this.baseUrl.replace("/bot", "/file/bot")}/${result.value.result.file_path}`
+    this.log("debug", "Got file URL", { fileId, filePath: result.value.result.file_path })
+    return Result.ok(downloadUrl)
   }
 
   /**
@@ -512,26 +602,33 @@ export class TelegramClient {
    * @param mimeType The MIME type for the data URL (e.g., "image/jpeg")
    * @returns The base64 data URL, or null on failure
    */
-  async downloadFileAsDataUrl(fileId: string, mimeType: string): Promise<string | null> {
-    const fileUrl = await this.getFileUrl(fileId)
-    if (!fileUrl) return null
+  async downloadFileAsDataUrl(
+    fileId: string,
+    mimeType: string
+  ): Promise<TelegramResult<string>> {
+    const fileUrlResult = await this.getFileUrl(fileId)
+    if (fileUrlResult.status === "error") {
+      return Result.err(fileUrlResult.error)
+    }
+
+    const fileUrl = fileUrlResult.value
 
     try {
       this.log("debug", "Downloading file", { fileUrl })
       const response = await fetch(fileUrl)
       if (!response.ok) {
         this.log("error", "Failed to download file", { status: response.status })
-        return null
+        return Result.err(new TelegramApiError({ cause: `Download failed: ${response.status}` }))
       }
 
       const buffer = await response.arrayBuffer()
       const base64 = Buffer.from(buffer).toString("base64")
       const dataUrl = `data:${mimeType};base64,${base64}`
       this.log("debug", "File downloaded", { size: buffer.byteLength })
-      return dataUrl
+      return Result.ok(dataUrl)
     } catch (error) {
       this.log("error", "Error downloading file", { error: String(error) })
-      return null
+      return Result.err(new TelegramApiError({ cause: error }))
     }
   }
 
