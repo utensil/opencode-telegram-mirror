@@ -110,14 +110,23 @@ export async function showQuestionButtons({
 
     const keyboard = TelegramClient.buildInlineKeyboard(options, { columns: 2 })
 
-    const message = await telegram.sendMessage(
-      `*${q.header}*\n${q.question}`,
-      { replyMarkup: keyboard }
-    )
+  const messageResult = await telegram.sendMessage(
+    `*${q.header}*\n${q.question}`,
+    { replyMarkup: keyboard }
+  )
 
-    if (message) {
-      context.messageIds.push(message.message_id)
-    }
+  if (messageResult.status === "error") {
+    log("error", "Failed to send question message", {
+      threadKey,
+      error: messageResult.error.message,
+    })
+    continue
+  }
+
+  if (messageResult.value) {
+    context.messageIds.push(messageResult.value.message_id)
+  }
+
   }
 
   log("info", "Showed question buttons", {
@@ -168,22 +177,37 @@ export async function handleQuestionCallback({
   const context = pendingQuestions.get(threadKey)
   if (!context) {
     log("warn", "No pending question for threadKey", { threadKey })
-    await telegram.answerCallbackQuery(callback.id, {
+    const answerResult = await telegram.answerCallbackQuery(callback.id, {
       text: "This question has expired",
       showAlert: true,
     })
+    if (answerResult.status === "error") {
+      log("error", "Failed to answer expired question", {
+        error: answerResult.error.message,
+      })
+    }
     return null
   }
 
   const question = context.questions[questionIndex]
   if (!question) {
     log("error", "Question index not found", { questionIndex, threadKey })
-    await telegram.answerCallbackQuery(callback.id)
+    const answerResult = await telegram.answerCallbackQuery(callback.id)
+    if (answerResult.status === "error") {
+      log("error", "Failed to answer invalid question", {
+        error: answerResult.error.message,
+      })
+    }
     return null
   }
 
   // Acknowledge the button press
-  await telegram.answerCallbackQuery(callback.id)
+  const ackResult = await telegram.answerCallbackQuery(callback.id)
+  if (ackResult.status === "error") {
+    log("error", "Failed to acknowledge question", {
+      error: ackResult.error.message,
+    })
+  }
 
   // Handle "Other" - wait for freetext input
   if (optionValue === "other") {
@@ -192,10 +216,15 @@ export async function handleQuestionCallback({
     // Update the message to prompt for freetext input
     const messageId = context.messageIds[questionIndex]
     if (messageId) {
-      await telegram.editMessage(
+      const editResult = await telegram.editMessage(
         messageId,
         `*${question.header}*\n${question.question}\n\n_Please type your answer:_`
       )
+      if (editResult.status === "error") {
+        log("error", "Failed to prompt freetext answer", {
+          error: editResult.error.message,
+        })
+      }
     }
     
     log("info", "Awaiting freetext input for question", { threadKey, questionIndex })
@@ -212,10 +241,15 @@ export async function handleQuestionCallback({
   const messageId = context.messageIds[questionIndex]
   if (messageId) {
     const answeredText = context.answers[questionIndex]?.join(", ") ?? ""
-    await telegram.editMessage(
+    const editResult = await telegram.editMessage(
       messageId,
       `*${question.header}*\n${question.question}\n\n_${answeredText}_`
     )
+    if (editResult.status === "error") {
+      log("error", "Failed to update answered question", {
+        error: editResult.error.message,
+      })
+    }
   }
 
   // Check if all questions are answered
@@ -285,10 +319,15 @@ export async function handleFreetextAnswer({
   // Update the message to show the answer
   const messageId = context.messageIds[questionIndex]
   if (messageId && question) {
-    await telegram.editMessage(
+    const editResult = await telegram.editMessage(
       messageId,
       `*${question.header}*\n${question.question}\n\n_${text}_`
     )
+    if (editResult.status === "error") {
+      log("error", "Failed to update freetext answer", {
+        error: editResult.error.message,
+      })
+    }
   }
 
   log("info", "Freetext answer recorded", { threadKey, questionIndex, text: text.slice(0, 50) })

@@ -5,15 +5,13 @@ Scope: repository root (applies to all files).
 
 ## Overview
 - Project: Telegram mirror for OpenCode sessions.
-- Primary runtime: Bun (root) with a Next.js app in `diff-viewer/`.
+- Primary runtime: Bun (root) 
 - Language: TypeScript with ESM modules and strict type checking.
 - Keep changes small and aligned with existing style.
 
 ## Repo Layout
 - `src/`: Bun-based Telegram mirror bot.
-- `diff-viewer/`: Next.js app for viewing diffs.
 - `tsconfig.json`: root TS config (strict, ESM).
-- `diff-viewer/tsconfig.json`: Next.js TS config.
 
 ## Commands (Root - Telegram Mirror)
 Install dependencies:
@@ -25,29 +23,12 @@ Run from source (explicit):
 Typecheck:
   - `bun run typecheck`
 
-## Commands (diff-viewer - Next.js)
-Install dependencies (from `diff-viewer/`):
-  - `npm install`
-Dev server:
-  - `npm run dev`
-Build:
-  - `npm run build`
-Start production server:
-  - `npm run start`
-Lint:
-  - `npm run lint`
-Lint a single file (example):
-  - `npx next lint --file app/page.tsx`
-Typecheck (manual):
-  - `npx tsc --noEmit`
-
 ## Tests
 - No test runner is configured in either package.
 - Single-test command: N/A (document here if tests are added).
 
 ## Single-File Checks
 - Root: `bun run typecheck` validates `src/**/*`.
-- Diff-viewer typecheck (manual): `npx tsc --noEmit`.
 - Lint single file: `npx next lint --file app/page.tsx`.
 - Use `npm run lint -- --file <path>` if you prefer npm.
 
@@ -65,7 +46,6 @@ Typecheck (manual):
 - Indentation: 2 spaces.
 - Semicolons are omitted in existing files.
 - Root `src/` uses double quotes.
-- `diff-viewer/` uses single quotes.
 - Keep line length readable (roughly 100–120 chars).
 - Use trailing commas in multi-line objects/arrays.
 - Separate logical blocks with blank lines.
@@ -73,7 +53,6 @@ Typecheck (manual):
 ## Imports
 - Order: Node built-ins (`node:`), external deps, internal modules.
 - Keep internal imports relative (no absolute paths in root).
-- In `diff-viewer/`, `@/*` path alias is available.
 - Avoid unused imports; remove when refactoring.
 
 ## Naming
@@ -108,20 +87,6 @@ Typecheck (manual):
 - Normalize ids to strings for comparisons.
 - Keep Telegram API interactions resilient (retry without Markdown).
 
-## Next.js (diff-viewer) Guidelines
-- App Router under `diff-viewer/app/`.
-- Mark client components with `'use client'`.
-- Default-export page components.
-- API routes live in `app/api/.../route.ts`.
-- Use `NextResponse.json` for API responses.
-- Guard against missing env vars (use fallbacks).
-- Use `kv` for storing diff data with TTL.
-
-## Styling (diff-viewer)
-- Use existing class names and inline styles sparingly.
-- Keep style values in CSS variables when possible.
-- Maintain small, focused components.
-
 ## Config & Environment
 - Root config loads from:
   - `~/.config/opencode/telegram.json`
@@ -132,11 +97,9 @@ Typecheck (manual):
 
 ## Dependency Management
 - Root uses Bun; avoid adding npm scripts unless required.
-- `diff-viewer/` uses npm; avoid mixing yarn/pnpm here.
 - Keep dependency upgrades minimal and justified.
 
 ## Generated Files
-- Do not edit files under `diff-viewer/.next/`.
 - Do not commit `dist/` or `node_modules/`.
 - Root build output goes to `dist/` (see `tsconfig.json`).
 
@@ -153,3 +116,26 @@ Typecheck (manual):
 ## Cursor/Copilot Rules
 - No `.cursor/rules/`, `.cursorrules`, or `.github/copilot-instructions.md` found.
 - If added later, summarize them here.
+
+<!-- opensrc:start -->
+
+## Source Code Reference
+
+Source code for dependencies is available in `opensrc/` for deeper understanding of implementation details.
+
+See `opensrc/sources.json` for the list of available packages and their versions.
+
+Use this source code when you need to understand how a package works internally, not just its types/interface.
+
+### Fetching Additional Source Code
+
+To fetch source code for a package or repository you need to understand, run:
+
+```bash
+npx opensrc <package>           # npm package (e.g., npx opensrc zod)
+npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
+npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
+npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
+```
+
+<!-- opensrc:end -->

@@ -71,3 +71,37 @@ export function setLastUpdateId(updateId: number, log: LogFn): void {
     ["last_update_id", String(updateId)]
   )
 }
+
+export function getControlMessageId(log: LogFn): number | null {
+  const database = getDb(log)
+  type Row = { value: string }
+  const row = database
+    .query<Row, [string]>("SELECT value FROM state WHERE key = ?")
+    .get("control_message_id")
+  return row ? Number.parseInt(row.value, 10) : null
+}
+
+export function setControlMessageId(messageId: number, log: LogFn): void {
+  const database = getDb(log)
+  database.run(
+    "INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)",
+    ["control_message_id", String(messageId)]
+  )
+}
+
+export function getSessionVariant(log: LogFn): string | null {
+  const database = getDb(log)
+  type Row = { value: string }
+  const row = database
+    .query<Row, [string]>("SELECT value FROM state WHERE key = ?")
+    .get("session_variant")
+  return row?.value ?? null
+}
+
+export function setSessionVariant(variant: string, log: LogFn): void {
+  const database = getDb(log)
+  database.run(
+    "INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)",
+    ["session_variant", variant]
+  )
+}

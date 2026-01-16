@@ -2,6 +2,7 @@
  * Diff service for uploading diffs to the diff viewer
  */
 
+import { Result, TaggedError } from "better-result"
 import type { LogFn } from "./log"
 
 // Configure via environment variable - optional, if not set diff uploads are disabled
@@ -20,6 +21,20 @@ export interface DiffUploadResult {
   url: string
   viewerUrl: string // URL for the mini-app viewer
 }
+
+export class DiffUploadError extends TaggedError("DiffUploadError")<{
+  message: string
+  cause: unknown
+}>() {
+  constructor(args: { cause: unknown }) {
+    const causeMessage = args.cause instanceof Error ? args.cause.message : String(args.cause)
+    super({ ...args, message: `Diff upload failed: ${causeMessage}` })
+  }
+}
+
+export type DiffUploadResultValue = DiffUploadResult
+export type DiffUploadResultError = DiffUploadError
+export type DiffUploadResultReturn = Result<DiffUploadResultValue | null, DiffUploadResultError>
 
 /**
  * Count additions and deletions between two strings
@@ -52,45 +67,50 @@ function countChanges(oldContent: string, newContent: string): { additions: numb
 export async function uploadDiff(
   files: DiffFile[],
   options?: { title?: string; log?: LogFn }
-): Promise<DiffUploadResult | null> {
+): Promise<DiffUploadResultReturn> {
   const log = options?.log ?? (() => {})
-  
+
   // If DIFF_VIEWER_URL is not configured, skip diff upload
   if (!DIFF_VIEWER_URL) {
     log("debug", "Diff upload skipped - DIFF_VIEWER_URL not configured")
-    return null
+    return Result.ok(null)
   }
-  
-  try {
-    log("debug", "Uploading diff", { fileCount: files.length, url: DIFF_VIEWER_URL })
-    
-    const response = await fetch(`${DIFF_VIEWER_URL}/api/diff`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: options?.title,
-        files,
-      }),
-    })
-    
-    if (!response.ok) {
-      log("error", "Failed to upload diff", { status: response.status })
-      return null
-    }
-    
-    const data = await response.json() as { id: string; url: string }
-    
-    log("info", "Diff uploaded", { id: data.id, url: data.url })
-    
-    return {
-      id: data.id,
-      url: data.url,
-      viewerUrl: `${DIFF_VIEWER_URL}/diff/${data.id}`,
-    }
-  } catch (error) {
-    log("error", "Error uploading diff", { error: String(error) })
-    return null
+
+  const uploadResult = await Result.tryPromise({
+    try: async () => {
+      log("debug", "Uploading diff", { fileCount: files.length, url: DIFF_VIEWER_URL })
+
+      const response = await fetch(`${DIFF_VIEWER_URL}/api/diff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: options?.title,
+          files,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Diff upload failed: ${response.status}`)
+      }
+
+      const data = (await response.json()) as { id: string; url: string }
+
+      log("info", "Diff uploaded", { id: data.id, url: data.url })
+
+      return {
+        id: data.id,
+        url: data.url,
+        viewerUrl: `${DIFF_VIEWER_URL}/diff/${data.id}`,
+      }
+    },
+    catch: (error) => new DiffUploadError({ cause: error }),
+  })
+
+  if (uploadResult.status === "error") {
+    log("error", "Error uploading diff", { error: uploadResult.error.message })
   }
+
+  return uploadResult
 }
 
 /**

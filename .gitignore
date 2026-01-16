@@ -10,3 +10,6 @@ dist/
 # Secrets - don't commit telegram credentials
 .opencode/telegram.json
 .opencode-telegram/
+
+# opensrc - source code for packages
+opensrc/

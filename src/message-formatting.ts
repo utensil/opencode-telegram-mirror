@@ -73,7 +73,18 @@ function getToolSummaryText(part: Part): string {
 }
 
 /**
+ * Status indicators for todo items
+ */
+const TODO_STATUS_ICONS: Record<string, string> = {
+  pending: "○",
+  in_progress: "◉",
+  completed: "✓",
+  cancelled: "✗",
+}
+
+/**
  * Format todo list from todowrite tool
+ * Shows all todos with status indicators
  */
 function formatTodoList(part: Part): string {
   if (part.type !== "tool" || part.tool !== "todowrite") return ""
@@ -81,17 +92,37 @@ function formatTodoList(part: Part): string {
   const todos = (part.state.input?.todos as Array<{
     content: string
     status: "pending" | "in_progress" | "completed" | "cancelled"
+    priority?: "high" | "medium" | "low"
   }>) ?? []
   
-  const activeIndex = todos.findIndex((todo) => todo.status === "in_progress")
-  const activeTodo = todos[activeIndex]
+  if (todos.length === 0) return ""
   
-  if (activeIndex === -1 || !activeTodo) return ""
+  const lines: string[] = []
   
-  const num = `${activeIndex + 1}.`
-  const content = activeTodo.content.charAt(0).toLowerCase() + activeTodo.content.slice(1)
+  for (const todo of todos) {
+    const icon = TODO_STATUS_ICONS[todo.status] || "○"
+    const content = todo.content
+    
+    // Format based on status
+    let formatted: string
+    if (todo.status === "in_progress") {
+      // Active item: bold
+      formatted = `${icon} *${escapeMarkdown(content)}*`
+    } else if (todo.status === "completed") {
+      // Completed: strikethrough
+      formatted = `${icon} ~${escapeMarkdown(content)}~`
+    } else if (todo.status === "cancelled") {
+      // Cancelled: strikethrough + italic
+      formatted = `${icon} ~_${escapeMarkdown(content)}_~`
+    } else {
+      // Pending: plain
+      formatted = `${icon} ${escapeMarkdown(content)}`
+    }
+    
+    lines.push(formatted)
+  }
   
-  return `${num} *${escapeMarkdown(content)}*`
+  return lines.join("\n")
 }
 
 /**

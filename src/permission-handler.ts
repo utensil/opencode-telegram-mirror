@@ -80,9 +80,17 @@ export async function showPermissionButtons({
 
   const keyboard = TelegramClient.buildInlineKeyboard(options, { columns: 3 })
 
-  const message = await telegram.sendMessage(messageText, { replyMarkup: keyboard })
+  const messageResult = await telegram.sendMessage(messageText, { replyMarkup: keyboard })
 
-  if (message) {
+  if (messageResult.status === "error") {
+    log("error", "Failed to show permission buttons", {
+      threadKey,
+      error: messageResult.error.message,
+    })
+    return
+  }
+
+  if (messageResult.value) {
     const context: PendingPermissionContext = {
       sessionId,
       requestId: request.id,
@@ -90,7 +98,7 @@ export async function showPermissionButtons({
       threadId,
       permission: request.permission,
       patterns: request.patterns,
-      messageId: message.message_id,
+      messageId: messageResult.value.message_id,
       directory,
     }
     pendingPermissions.set(threadKey, context)
@@ -101,6 +109,7 @@ export async function showPermissionButtons({
       patterns: request.patterns,
     })
   }
+
 }
 
 /**
@@ -133,15 +142,25 @@ export async function handlePermissionCallback({
 
   const context = pendingPermissions.get(threadKey)
   if (!context) {
-    await telegram.answerCallbackQuery(callback.id, {
+    const answerResult = await telegram.answerCallbackQuery(callback.id, {
       text: "This permission request has expired",
       showAlert: true,
     })
+    if (answerResult.status === "error") {
+      log("error", "Failed to answer permission callback", {
+        error: answerResult.error.message,
+      })
+    }
     return null
   }
 
   // Acknowledge the button press
-  await telegram.answerCallbackQuery(callback.id)
+  const ackResult = await telegram.answerCallbackQuery(callback.id)
+  if (ackResult.status === "error") {
+    log("error", "Failed to acknowledge permission callback", {
+      error: ackResult.error.message,
+    })
+  }
 
   // Format result text
   const resultText = (() => {
@@ -169,7 +188,12 @@ export async function handlePermissionCallback({
   }
   updatedText += resultText
 
-  await telegram.editMessage(context.messageId, updatedText)
+  const editResult = await telegram.editMessage(context.messageId, updatedText)
+  if (editResult.status === "error") {
+    log("error", "Failed to update permission message", {
+      error: editResult.error.message,
+    })
+  }
 
   pendingPermissions.delete(threadKey)
 

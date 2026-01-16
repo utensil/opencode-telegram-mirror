@@ -4,6 +4,7 @@
 
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
+import { Result, TaggedError } from "better-result"
 import type { LogFn } from "./log"
 
 export interface BotConfig {
@@ -16,7 +17,20 @@ export interface BotConfig {
   sendUrl?: string
 }
 
-export async function loadConfig(directory: string, log?: LogFn): Promise<BotConfig> {
+export class ConfigLoadError extends TaggedError("ConfigLoadError")<{
+  path: string
+  message: string
+  cause: unknown
+}>() {
+  constructor(args: { path: string; cause: unknown }) {
+    const message = `Failed to load config at ${args.path}`
+    super({ ...args, message })
+  }
+}
+
+export type ConfigLoadResult = Result<BotConfig, ConfigLoadError>
+
+export async function loadConfig(directory: string, log?: LogFn): Promise<ConfigLoadResult> {
   const config: BotConfig = {}
   const homeDir = process.env.HOME || process.env.USERPROFILE || ""
 
@@ -28,25 +42,31 @@ export async function loadConfig(directory: string, log?: LogFn): Promise<BotCon
   log?.("debug", "Checking config file paths", { paths: configPaths })
 
   for (const configPath of configPaths) {
-    try {
-      const content = await readFile(configPath, "utf-8")
-      const fileConfig = JSON.parse(content) as BotConfig
-      Object.assign(config, fileConfig)
-      log?.("info", "Loaded config file", { 
+    const fileResult = await Result.tryPromise({
+      try: async () => {
+        const content = await readFile(configPath, "utf-8")
+        return JSON.parse(content) as BotConfig
+      },
+      catch: (error) => new ConfigLoadError({ path: configPath, cause: error }),
+    })
+
+    if (fileResult.status === "ok") {
+      Object.assign(config, fileResult.value)
+      log?.("info", "Loaded config file", {
         path: configPath,
-        keys: Object.keys(fileConfig),
+        keys: Object.keys(fileResult.value),
       })
-    } catch (error) {
-      log?.("debug", "Config file not found or invalid", { 
+    } else {
+      log?.("debug", "Config file not found or invalid", {
         path: configPath,
-        error: String(error).slice(0, 100),
+        error: String(fileResult.error).slice(0, 100),
       })
     }
   }
 
   // Environment variables override file config
   const envOverrides: string[] = []
-  
+
   if (process.env.TELEGRAM_BOT_TOKEN) {
     config.botToken = process.env.TELEGRAM_BOT_TOKEN
     envOverrides.push("TELEGRAM_BOT_TOKEN")
@@ -75,5 +95,5 @@ export async function loadConfig(directory: string, log?: LogFn): Promise<BotCon
     log?.("info", "Environment variable overrides applied", { variables: envOverrides })
   }
 
-  return config
+  return Result.ok(config)
 }

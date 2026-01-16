@@ -15,6 +15,7 @@ import {
   createOpencodeClient as createOpencodeClientV2,
   type OpencodeClient as OpencodeClientV2,
 } from "@opencode-ai/sdk/v2"
+import { Result, TaggedError } from "better-result"
 import { createLogger } from "./log"
 
 const log = createLogger()
@@ -28,50 +29,102 @@ export interface OpenCodeServer {
   baseUrl: string
 }
 
+export class PortLookupError extends TaggedError("PortLookupError")<{
+  message: string
+  cause: unknown
+}>() {
+  constructor(args: { cause: unknown }) {
+    const causeMessage = args.cause instanceof Error ? args.cause.message : String(args.cause)
+    super({ ...args, message: `Failed to get open port: ${causeMessage}` })
+  }
+}
+
+export class ServerStartError extends TaggedError("ServerStartError")<{
+  message: string
+  cause: unknown
+}>() {
+  constructor(args: { cause: unknown }) {
+    const causeMessage = args.cause instanceof Error ? args.cause.message : String(args.cause)
+    super({ ...args, message: `Server failed to start: ${causeMessage}` })
+  }
+}
+
+export class DirectoryAccessError extends TaggedError("DirectoryAccessError")<{
+  message: string
+  directory: string
+  cause: unknown
+}>() {
+  constructor(args: { directory: string; cause: unknown }) {
+    const causeMessage = args.cause instanceof Error ? args.cause.message : String(args.cause)
+    super({ ...args, message: `Directory not accessible: ${args.directory} (${causeMessage})` })
+  }
+}
+
 let server: OpenCodeServer | null = null
 
-async function getOpenPort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer()
-    srv.listen(0, () => {
-      const address = srv.address()
-      if (address && typeof address === "object") {
-        const port = address.port
-        srv.close(() => resolve(port))
-      } else {
-        reject(new Error("Failed to get port"))
-      }
-    })
-    srv.on("error", reject)
+async function getOpenPort(): Promise<Result<number, PortLookupError>> {
+  return Result.tryPromise({
+    try: () =>
+      new Promise<number>((resolve, reject) => {
+        const srv = net.createServer()
+        srv.listen(0, () => {
+          const address = srv.address()
+          if (address && typeof address === "object") {
+            const port = address.port
+            srv.close(() => resolve(port))
+          } else {
+            reject(new Error("Failed to get port"))
+          }
+        })
+        srv.on("error", reject)
+      }),
+    catch: (error) => new PortLookupError({ cause: error }),
   })
 }
 
-async function waitForServer(port: number, maxAttempts = 30, baseUrl?: string): Promise<boolean> {
+async function waitForServer(
+  port: number,
+  maxAttempts = 30,
+  baseUrl?: string
+): Promise<Result<boolean, ServerStartError>> {
   const url = baseUrl || `http://127.0.0.1:${port}`
+
   for (let i = 0; i < maxAttempts; i++) {
-    try {
-      const response = await fetch(`${url}/session`, {
-        signal: AbortSignal.timeout(2000),
-      })
-      if (response.status < 500) {
-        return true
+    const responseResult = await Result.tryPromise({
+      try: () =>
+        fetch(`${url}/session`, {
+          signal: AbortSignal.timeout(2000),
+        }),
+      catch: (error) => new ServerStartError({ cause: error }),
+    })
+
+    if (responseResult.status === "ok") {
+      if (responseResult.value.status < 500) {
+        return Result.ok(true)
       }
-    } catch {
-      // Keep trying
     }
+
     await new Promise((r) => setTimeout(r, 1000))
   }
-  throw new Error(`Server did not start at ${url} after ${maxAttempts} seconds`)
+
+  return Result.err(
+    new ServerStartError({
+      cause: new Error(`Server did not start at ${url} after ${maxAttempts} seconds`),
+    })
+  )
 }
 
 /**
  * Connect to an already-running OpenCode server
  */
-export async function connectToServer(baseUrl: string, directory: string): Promise<OpenCodeServer> {
+export async function connectToServer(
+  baseUrl: string,
+  directory: string
+): Promise<Result<OpenCodeServer, ServerStartError>> {
   // Reuse existing server if connected to same URL
   if (server && server.baseUrl === baseUrl) {
     log("info", "Reusing existing connection", { baseUrl })
-    return server
+    return Result.ok(server)
   }
 
   log("info", "Connecting to external OpenCode server", { baseUrl })
@@ -81,7 +134,11 @@ export async function connectToServer(baseUrl: string, directory: string): Promi
   const port = Number(url.port) || (url.protocol === "https:" ? 443 : 80)
 
   // Wait for server to be ready
-  await waitForServer(port, 30, baseUrl)
+  const readyResult = await waitForServer(port, 30, baseUrl)
+  if (readyResult.status === "error") {
+    return Result.err(readyResult.error)
+  }
+
   log("info", "External server ready", { baseUrl })
 
   const fetchWithTimeout = (request: Request) =>
@@ -109,26 +166,37 @@ export async function connectToServer(baseUrl: string, directory: string): Promi
     baseUrl,
   }
 
-  return server
+  return Result.ok(server)
 }
 
-export async function startServer(directory: string): Promise<OpenCodeServer> {
+export async function startServer(
+  directory: string
+): Promise<Result<OpenCodeServer, DirectoryAccessError | PortLookupError | ServerStartError>> {
   // Reuse existing server if running
   if (server?.process && !server.process.killed) {
     log("info", "Reusing existing server", { directory, port: server.port })
-    return server
+    return Result.ok(server)
   }
 
   // Verify directory exists
-  try {
-    fs.accessSync(directory, fs.constants.R_OK | fs.constants.X_OK)
-  } catch {
-    throw new Error(`Directory not accessible: ${directory}`)
+  const accessResult = Result.try({
+    try: () => fs.accessSync(directory, fs.constants.R_OK | fs.constants.X_OK),
+    catch: (error) => new DirectoryAccessError({ directory, cause: error }),
+  })
+
+  if (accessResult.status === "error") {
+    return Result.err(accessResult.error)
   }
 
   const envPort = process.env.OPENCODE_PORT
   const parsedPort = envPort ? Number(envPort) : null
-  const port = parsedPort && !Number.isNaN(parsedPort) ? parsedPort : await getOpenPort()
+  const portResult = parsedPort && !Number.isNaN(parsedPort) ? Result.ok(parsedPort) : await getOpenPort()
+
+  if (portResult.status === "error") {
+    return Result.err(portResult.error)
+  }
+
+  const port = portResult.value
   const opencodePath = process.env.OPENCODE_PATH || `${process.env.HOME}/.opencode/bin/opencode`
 
   log("info", "Starting opencode serve", { directory, port })
@@ -170,13 +238,19 @@ export async function startServer(directory: string): Promise<OpenCodeServer> {
 
     if (code !== 0) {
       log("info", "Restarting server", { directory })
-      startServer(directory).catch((e) => {
-        log("error", "Failed to restart server", { error: String(e) })
+      startServer(directory).then((result) => {
+        if (result.status === "error") {
+          log("error", "Failed to restart server", { error: result.error.message })
+        }
       })
     }
   })
 
-  await waitForServer(port)
+  const readyResult = await waitForServer(port)
+  if (readyResult.status === "error") {
+    return Result.err(readyResult.error)
+  }
+
   log("info", "Server ready", { directory, port })
 
   const baseUrl = `http://127.0.0.1:${port}`
@@ -205,17 +279,28 @@ export async function startServer(directory: string): Promise<OpenCodeServer> {
     baseUrl,
   }
 
-  return server
+  return Result.ok(server)
 }
 
 export function getServer(): OpenCodeServer | null {
   return server
 }
 
-export async function stopServer(): Promise<void> {
-  if (server) {
-    server.process?.kill()
-    log("info", "Server stopped", { directory: server.directory })
-    server = null
+export async function stopServer(): Promise<Result<void, ServerStartError>> {
+  if (!server) {
+    return Result.ok(undefined)
   }
+
+  const serverToStop = server
+
+  const stopResult = Result.try({
+    try: () => {
+      serverToStop.process?.kill()
+      log("info", "Server stopped", { directory: serverToStop.directory })
+      server = null
+    },
+    catch: (error) => new ServerStartError({ cause: error }),
+  })
+
+  return stopResult.map(() => undefined)
 }
