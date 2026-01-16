@@ -11,7 +11,7 @@ A standalone bot that mirrors OpenCode sessions to Telegram topics, enabling col
 | **📋 Slash Commands** | `/interrupt`, `/plan`, `/build`, `/review`, `/rename` for quick actions |
 | **🔍 Diff Viewer** | Automatic diff generation with syntax highlighting and shareable links |
 | **📸 Media Support** | Send images and voice messages (transcribed via Whisper) as prompts |
-| **🧵 Thread Support** | Telegram forum threads with automatic topic naming |
+| **🧵 Thread Support** | Telegram forum threads with automatic title sync from OpenCode sessions |
 | **💾 Session Persistence** | Resume sessions across devices and restarts |
 | **🔄 Multi-instance** | Run multiple mirrors for different sessions/channels |
 
