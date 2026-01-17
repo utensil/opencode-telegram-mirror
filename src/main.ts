@@ -98,6 +98,10 @@ interface BotState {
 	assistantMessageIds: Set<string>;
 	pendingParts: Map<string, Part[]>;
 	sentPartIds: Set<string>;
+	typingIndicators: Map<
+		string,
+		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
+	>;
 }
 
 async function main() {
@@ -259,6 +263,7 @@ async function main() {
 		assistantMessageIds: new Set(),
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
+		typingIndicators: new Map(),
 	}
 
 	if (initialThreadTitle && config.threadId) {
@@ -1014,7 +1019,8 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 	const sessionId =
 		ev.properties?.sessionID ??
 		ev.properties?.info?.sessionID ??
-		ev.properties?.part?.sessionID
+		ev.properties?.part?.sessionID ??
+		ev.properties?.session?.id
 	const sessionTitle = ev.properties?.session?.title
 
 	// Log errors in full and send to Telegram
@@ -1076,6 +1082,12 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 			const key = `${info.sessionID}:${info.id}`
 			state.assistantMessageIds.add(key)
 			log("debug", "Registered assistant message", { key })
+			const entry = state.typingIndicators.get(key)
+			if (entry && entry.mode === "tool") {
+				if (entry.timeout) clearTimeout(entry.timeout)
+				entry.stop()
+				state.typingIndicators.delete(key)
+			}
 		}
 	}
 
@@ -1093,6 +1105,39 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 			return
 		}
 
+		const stopTypingIndicator = (targetKey: string) => {
+			const entry = state.typingIndicators.get(targetKey)
+			if (!entry) return
+			if (entry.timeout) clearTimeout(entry.timeout)
+			entry.stop()
+			state.typingIndicators.delete(targetKey)
+		}
+
+		const startTypingIndicator = (targetKey: string, mode: "idle" | "tool") => {
+			const existing = state.typingIndicators.get(targetKey)
+			if (existing && existing.mode === mode) return
+			if (existing) {
+				if (existing.timeout) clearTimeout(existing.timeout)
+				existing.stop()
+			}
+
+			const stop = state.telegram.startTyping(mode === "tool" ? 2000 : 4000)
+			state.typingIndicators.set(targetKey, { stop, timeout: null, mode })
+		}
+
+		const bumpTypingIndicator = (targetKey: string, mode: "idle" | "tool") => {
+			const existing = state.typingIndicators.get(targetKey)
+			if (!existing || existing.mode !== mode) {
+				startTypingIndicator(targetKey, mode)
+				return
+			}
+
+			if (existing.timeout) clearTimeout(existing.timeout)
+			existing.timeout = setTimeout(() => {
+				stopTypingIndicator(targetKey)
+			}, 12000)
+		}
+
 		log("debug", "Processing message part", {
 			key,
 			partType: part.type,
@@ -1106,12 +1151,11 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		state.pendingParts.set(key, existing)
 
 		if (part.type !== "step-finish") {
-			const typingResult = await state.telegram.sendTypingAction()
-			if (typingResult.status === "error") {
-				log("debug", "Typing action failed", {
-					error: typingResult.error.message,
-				})
-			}
+			const typingMode =
+				part.type === "tool" && (part.tool === "edit" || part.tool === "write")
+					? "tool"
+					: "idle"
+			bumpTypingIndicator(key, typingMode)
 		}
 
 		// Send tools/reasoning immediately (except edit/write tools - wait for completion to get diff data)
@@ -1139,6 +1183,7 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 
 		// On step-finish, send remaining parts
 		if (part.type === "step-finish") {
+			stopTypingIndicator(key)
 			for (const p of existing) {
 				if (p.type === "step-start" || p.type === "step-finish") continue
 				if (state.sentPartIds.has(p.id)) continue
@@ -1238,6 +1283,24 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 				}
 			}
 			state.pendingParts.delete(key)
+		}
+	}
+
+	if (ev.type === "message.updated") {
+		const info = ev.properties.info
+		if (info?.role === "assistant") {
+			const key = `${info.sessionID}:${info.id}`
+			const entry = state.typingIndicators.get(key)
+			if (entry && entry.mode === "tool") {
+				const stopTypingIndicator = (targetKey: string) => {
+					const existing = state.typingIndicators.get(targetKey)
+					if (!existing) return
+					if (existing.timeout) clearTimeout(existing.timeout)
+					existing.stop()
+					state.typingIndicators.delete(targetKey)
+				}
+				stopTypingIndicator(key)
+			}
 		}
 	}
 
