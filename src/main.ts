@@ -649,7 +649,7 @@ async function handleTelegramMessage(
 				directory: state.directory,
 			})
 			if (abortResult.data) {
-				await state.telegram.sendMessage("Interrupted.")
+				log("info", "Abort request sent", { sessionId: state.sessionId })
 			} else {
 				log("error", "Failed to abort session", {
 					sessionId: state.sessionId,
@@ -695,7 +695,7 @@ async function handleTelegramMessage(
 				directory: state.directory,
 			})
 			if (abortResult.data) {
-				await state.telegram.sendMessage("Interrupted.")
+				log("info", "Abort request sent", { sessionId: state.sessionId })
 			} else {
 				log("error", "Failed to abort session", {
 					sessionId: state.sessionId,
@@ -1026,10 +1026,29 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 	// Log errors in full and send to Telegram
 	if (ev.type === "session.error") {
 		const errorMsg = JSON.stringify(ev.properties, null, 2)
+		const error = ev.properties?.error as
+			| { name?: string; data?: { message?: string } }
+			| undefined
+		const errorName = error?.name
+		const errorText = error?.data?.message
+		const isInterrupted =
+			errorName === "MessageAbortedError" || errorText === "The operation was aborted."
+
 		log("error", "OpenCode session error", {
 			sessionId,
 			error: ev.properties,
 		})
+
+		if (isInterrupted) {
+			const sendResult = await state.telegram.sendMessage("Interrupted.")
+			if (sendResult.status === "error") {
+				log("error", "Failed to send interrupt message", {
+					error: sendResult.error.message,
+				})
+			}
+			return
+		}
+
 		// Send error to Telegram for visibility
 		const sendResult = await state.telegram.sendMessage(
 			`OpenCode Error:\n${errorMsg.slice(0, 3500)}`
