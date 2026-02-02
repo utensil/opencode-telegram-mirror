@@ -54,6 +54,7 @@ import {
 	transcribeVoice,
 	getVoiceNotSupportedMessage,
 } from "./voice"
+import * as ICloudCoordination from "./icloud-integration"
 
 const log = createLogger()
 
@@ -162,6 +163,10 @@ interface BotState {
 	botUserId: number | null;
 	sessionId: string | null;
 	needsTitle: boolean;
+
+	// iCloud device coordination
+	deviceId: string;
+	useICloudCoordination: boolean;
 
 	assistantMessageIds: Set<string>;
 	pendingParts: Map<string, Part[]>;
@@ -290,10 +295,26 @@ async function main() {
 		{ command: "review", description: "Review changes [commit|branch|pr]" },
 		{ command: "rename", description: "Rename the session" },
 		{ command: "version", description: "Show mirror bot version" },
+		{ command: "dev", description: "List all devices" },
+		{ command: "use", description: "Activate device by number" },
 	])
 	if (commandsResult.status === "error") {
 		log("warn", "Failed to set bot commands", { error: commandsResult.error.message })
 	}
+
+	// Initialize device coordination
+	log("info", "Initializing device coordination...")
+	const coordination = await ICloudCoordination.initializeCoordination(
+		directory,
+		config.threadId ?? null,
+		log
+	)
+
+	log("info", "Device coordination initialized", {
+		deviceId: coordination.deviceId,
+		useICloud: coordination.useICloud,
+		mode: coordination.useICloud ? "iCloud shared state" : "local database",
+	})
 
 	// Determine session ID
 	log("info", "Checking for existing session...")
@@ -330,6 +351,8 @@ async function main() {
 		botUserId: botInfo.id,
 		sessionId,
 		needsTitle: !initialThreadTitle,
+		deviceId: coordination.deviceId,
+		useICloudCoordination: coordination.useICloud,
 		assistantMessageIds: new Set(),
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
@@ -525,6 +548,8 @@ async function startUpdatesPoller(state: BotState) {
 		source: pollSource,
 		chatId: state.chatId,
 		threadId: state.threadId ?? "(none)",
+		deviceId: state.deviceId,
+		useICloudCoordination: state.useICloudCoordination,
 		startupTimestamp,
 		startupTime: new Date(startupTimestamp * 1000).toISOString(),
 	})
@@ -532,9 +557,124 @@ async function startUpdatesPoller(state: BotState) {
 	let pollCount = 0
 	let totalUpdatesProcessed = 0
 
+	// Initialize heartbeat timers with randomized intervals
+	let nextDeviceHeartbeat = Date.now() + 
+		ICloudCoordination.getRandomizedStandbyHeartbeatInterval()
+	
+	let nextActiveHeartbeat = Date.now() + 
+		ICloudCoordination.getRandomizedActiveHeartbeatInterval()
+	
+	let wasActive = false
+
 	while (true) {
 		try {
 			pollCount++
+			const now = Date.now()
+
+			// ═══════════════════════════════════════════════════════════
+			// Check if this device should be active (includes failover)
+			// ═══════════════════════════════════════════════════════════
+			
+			const isActive = await ICloudCoordination.checkIfActiveWithFailover(
+				state.deviceId,
+				state.useICloudCoordination,
+				log
+			)
+
+			// ═══════════════════════════════════════════════════════════
+			// Detect state transitions and reset timers
+			// ═══════════════════════════════════════════════════════════
+			
+			if (isActive && !wasActive) {
+				// Just became active - reset to FAST heartbeat
+				log("info", "Device became active, switching to fast heartbeat", {
+					deviceId: state.deviceId,
+				})
+				nextDeviceHeartbeat = now + 
+					ICloudCoordination.getRandomizedActiveHeartbeatInterval()
+				nextActiveHeartbeat = now + 
+					ICloudCoordination.getRandomizedActiveHeartbeatInterval()
+			} else if (!isActive && wasActive) {
+				// Just became standby - reset to SLOW heartbeat
+				log("info", "Device became standby, switching to slow heartbeat", {
+					deviceId: state.deviceId,
+				})
+				nextDeviceHeartbeat = now + 
+					ICloudCoordination.getRandomizedStandbyHeartbeatInterval()
+			}
+			wasActive = isActive
+
+			// ═══════════════════════════════════════════════════════════
+			// Send heartbeats based on state
+			// ═══════════════════════════════════════════════════════════
+			
+			if (isActive) {
+				// ACTIVE DEVICE: Fast heartbeats (30-40s)
+				
+				// Device heartbeat (devices/<id>.json)
+				if (now >= nextDeviceHeartbeat) {
+					await ICloudCoordination.sendDeviceHeartbeat(
+						state.deviceId,
+						state.useICloudCoordination,
+						log
+					)
+					nextDeviceHeartbeat = now + 
+						ICloudCoordination.getRandomizedActiveHeartbeatInterval()
+					
+					log("debug", "Active device heartbeat sent", {
+						nextIn: Math.round((nextDeviceHeartbeat - now) / 1000) + "s",
+					})
+				}
+				
+				// Active heartbeat (state.json)
+				if (now >= nextActiveHeartbeat) {
+					await ICloudCoordination.sendActiveHeartbeat(
+						state.deviceId,
+						state.useICloudCoordination,
+						log
+					)
+					nextActiveHeartbeat = now + 
+						ICloudCoordination.getRandomizedActiveHeartbeatInterval()
+					
+					log("debug", "Active state heartbeat sent", {
+						nextIn: Math.round((nextActiveHeartbeat - now) / 1000) + "s",
+					})
+				}
+			} else {
+				// STANDBY DEVICE: Slow heartbeats (5-6 min)
+				
+				// Device heartbeat (devices/<id>.json) - INFREQUENT
+				if (now >= nextDeviceHeartbeat) {
+					await ICloudCoordination.sendDeviceHeartbeat(
+						state.deviceId,
+						state.useICloudCoordination,
+						log
+					)
+					nextDeviceHeartbeat = now + 
+						ICloudCoordination.getRandomizedStandbyHeartbeatInterval()
+					
+					log("debug", "Standby device heartbeat sent", {
+						nextIn: Math.round((nextDeviceHeartbeat - now) / 1000) + "s",
+					})
+				}
+				
+				// Standby: Sleep for CHECK interval (30-40s) - FREQUENT
+				const sleepMs = ICloudCoordination.getRandomizedCheckInterval()
+				
+				log("debug", "Standby mode, checking again soon", {
+					deviceId: state.deviceId,
+					pollCount,
+					nextCheckIn: Math.round(sleepMs / 1000) + "s",
+				})
+				
+				await Bun.sleep(sleepMs)
+				continue
+			}
+
+			// ═══════════════════════════════════════════════════════════
+			// ACTIVE MODE: Poll Telegram and process messages
+			// ═══════════════════════════════════════════════════════════
+
 			const pollStart = Date.now()
 
 			let updates = state.updatesUrl
@@ -602,6 +742,10 @@ async function startUpdatesPoller(state: BotState) {
 					})
 				}
 			}
+			
+			// Active device polls frequently
+			await Bun.sleep(1000)
+			
 		} catch (error) {
 			log("error", "Poll error, retrying in 5s", {
 				pollNumber: pollCount,
@@ -778,6 +922,42 @@ async function handleTelegramMessage(
 				error: sendResult.error.message,
 			})
 		}
+		return
+	}
+
+	// ═══════════════════════════════════════════════════════════
+	// DEVICE MANAGEMENT COMMANDS
+	// ═══════════════════════════════════════════════════════════
+
+	if (messageText?.trim() === "/dev") {
+		log("info", "Received /dev command")
+		
+		const result = await ICloudCoordination.getDeviceStatus(
+			state.useICloudCoordination,
+			log
+		)
+		
+		await state.telegram.sendMessage(result.message)
+		return
+	}
+
+	if (messageText?.startsWith("/use ")) {
+		const selection = messageText.slice(5).trim()
+		
+		if (!selection) {
+			await state.telegram.sendMessage("Usage: /use <number>\nExample: /use 2")
+			return
+		}
+		
+		log("info", "Received /use command", { selection })
+		
+		const result = await ICloudCoordination.activateDeviceByNumberOrName(
+			selection,
+			state.useICloudCoordination,
+			log
+		)
+		
+		await state.telegram.sendMessage(result.message)
 		return
 	}
 

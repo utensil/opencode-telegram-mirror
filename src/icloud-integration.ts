@@ -407,4 +407,3 @@ export function getRandomizedFailoverJitter(): number {
   return Math.random() * RANDOMIZATION.FAILOVER_JITTER_MS
 }
 
-export { DEVICE_NAME }
