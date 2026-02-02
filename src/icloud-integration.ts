@@ -237,6 +237,18 @@ export async function activateDeviceByNumberOrName(
       }
     }
     
+    // Check if device is stale
+    const staleThreshold = icloud.HEARTBEAT_TIMEOUT_MS
+    const isStale = device.lastSeenAgo > staleThreshold
+    
+    if (isStale) {
+      const staleSeconds = Math.floor(device.lastSeenAgo / 1000)
+      return {
+        success: false,
+        message: `❌ Device #${deviceNumber} "${device.name}" is stale (last seen ${staleSeconds}s ago, timeout ${staleThreshold/1000}s). Use /dev to see active devices.`,
+      }
+    }
+    
     // Activate by device name
     const result = await icloud.activateDevice(device.name, log)
     
@@ -252,7 +264,26 @@ export async function activateDeviceByNumberOrName(
       message: `✅ Device #${deviceNumber} "${device.name}" is now ACTIVE`,
     }
   } else {
-    // Activate by full device name
+    // Activate by full device name - get device status to check staleness
+    const statusResult = await getDeviceStatus(useICloud, log)
+    
+    if (statusResult.success && statusResult.devices) {
+      const device = statusResult.devices.find(d => d.name === selection)
+      
+      if (device) {
+        const staleThreshold = icloud.HEARTBEAT_TIMEOUT_MS
+        const isStale = device.lastSeenAgo > staleThreshold
+        
+        if (isStale) {
+          const staleSeconds = Math.floor(device.lastSeenAgo / 1000)
+          return {
+            success: false,
+            message: `❌ Device "${selection}" is stale (last seen ${staleSeconds}s ago, timeout ${staleThreshold/1000}s). Use /dev to see active devices.`,
+          }
+        }
+      }
+    }
+    
     const result = await icloud.activateDevice(selection, log)
     
     if (result.status === "error") {
