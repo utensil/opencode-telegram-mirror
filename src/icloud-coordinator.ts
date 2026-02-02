@@ -79,6 +79,7 @@ export const RANDOMIZATION = {
   
   // Heartbeat timeout (when to consider device stale)
   HEARTBEAT_TIMEOUT_MS: 90000,        // 90 seconds (must be > max active heartbeat interval)
+  STANDBY_HEARTBEAT_TIMEOUT_MS: 450000, // 7.5 minutes (must be > max standby heartbeat interval)
   
   // Security: max foreign chat IDs to track
   MAX_FOREIGN_CHAT_IDS: 100,          // Prevent unbounded growth
@@ -96,6 +97,7 @@ export function getRandomizedInterval(base: number, jitter: number): number {
 
 // Legacy exports for backwards compatibility
 export const HEARTBEAT_TIMEOUT_MS = RANDOMIZATION.HEARTBEAT_TIMEOUT_MS
+export const STANDBY_HEARTBEAT_TIMEOUT_MS = RANDOMIZATION.STANDBY_HEARTBEAT_TIMEOUT_MS
 export const FAILOVER_JITTER_MAX_MS = RANDOMIZATION.FAILOVER_JITTER_MS
 
 export class CoordinatorError extends TaggedError("CoordinatorError")<{
