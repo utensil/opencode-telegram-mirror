@@ -297,6 +297,7 @@ async function main() {
 		{ command: "version", description: "Show mirror bot version" },
 		{ command: "dev", description: "List all devices" },
 		{ command: "use", description: "Activate device by number" },
+		{ command: "restart", description: "Restart the bot safely with rollback" },
 	])
 	if (commandsResult.status === "error") {
 		log("warn", "Failed to set bot commands", { error: commandsResult.error.message })
@@ -922,6 +923,17 @@ async function handleTelegramMessage(
 				error: sendResult.error.message,
 			})
 		}
+		return
+	}
+
+	if (messageText?.trim() === "/restart") {
+		log("info", "Received /restart command")
+		await state.telegram.sendMessage("Restarting bot safely with automatic rollback...")
+		const { spawn } = await import("node:child_process")
+		spawn(".agents/scripts/safe-restart.sh", {
+			detached: true,
+			stdio: "ignore",
+		})
 		return
 	}
 
