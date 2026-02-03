@@ -79,6 +79,9 @@ export const RANDOMIZATION = {
   
   // Heartbeat timeout (when to consider device stale)
   HEARTBEAT_TIMEOUT_MS: 90000,        // 90 seconds (must be > max active heartbeat interval)
+  
+  // Security: max foreign chat IDs to track
+  MAX_FOREIGN_CHAT_IDS: 100,          // Prevent unbounded growth
 } as const
 
 /**
@@ -201,7 +204,7 @@ export async function writeState(
 export async function addForeignChatId(
   chatId: number,
   log?: LogFn
-): Promise<Result<void, CoordinatorError>> {
+): Promise<Result<boolean, CoordinatorError>> {
   return Result.tryPromise({
     try: async () => {
       const currentStateResult = await readState(log)
@@ -213,13 +216,25 @@ export async function addForeignChatId(
       
       // Only add if not already in the list
       if (!state.foreignChatIds.includes(chatId)) {
+        // Enforce max limit - drop oldest if full
+        if (state.foreignChatIds.length >= RANDOMIZATION.MAX_FOREIGN_CHAT_IDS) {
+          const droppedId = state.foreignChatIds.shift()
+          log?.("info", "Foreign chat ID list full, dropping oldest", { 
+            droppedId, 
+            maxIds: RANDOMIZATION.MAX_FOREIGN_CHAT_IDS 
+          })
+        }
+        
         state.foreignChatIds.push(chatId)
         state.lastModified = Date.now()
         state.modifiedBy = "foreign-chat-tracker"
         
         await writeFile(STATE_FILE, JSON.stringify(state, null, 2))
         log?.("info", "Added foreign chat ID", { chatId, totalForeignChats: state.foreignChatIds.length })
+        return true // New ID was added
       }
+      
+      return false // ID already existed
     },
     catch: (error) =>
       new CoordinatorError({

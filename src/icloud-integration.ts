@@ -453,11 +453,12 @@ export async function cleanupStaleDevices(
 
 /**
  * Add a foreign chat ID that tried to connect
+ * Returns true if new ID was added, false if already existed
  */
 export async function addForeignChatId(
   chatId: number,
   log: LogFn
-): Promise<Result<void, CoordinatorError>> {
+): Promise<Result<boolean, CoordinatorError>> {
   return icloud.addForeignChatId(chatId, log)
 }
 

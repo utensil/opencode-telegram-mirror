@@ -838,7 +838,7 @@ async function pollFromDO(state: BotState): Promise<TelegramUpdate[]> {
 				expectedChatId: state.chatId,
 			})
 			const addResult = await ICloudCoordination.addForeignChatId(chatId, log)
-			if (addResult.status === "ok") {
+			if (addResult.status === "ok" && addResult.value === true) {
 				newForeignAdded = true
 			}
 		}
@@ -848,9 +848,13 @@ async function pollFromDO(state: BotState): Promise<TelegramUpdate[]> {
 			const allForeignResult = await ICloudCoordination.getForeignChatIds(log)
 			if (allForeignResult.status === "ok") {
 				const allForeign = allForeignResult.value
-				const foreignList = allForeign.map(id => `• ${id}`).join("\n")
+				const total = allForeign.length
+				// Show last 5 (most recent) foreign chat IDs
+				const recent = allForeign.slice(-5)
+				const foreignList = recent.map(id => `• ${id}`).join("\n")
 				await state.telegram.sendMessage(
-					`⚠️ Warning: This bot received messages from foreign chat IDs:\n\n${foreignList}\n\n` +
+					`⚠️ Warning: This bot received messages from ${total} foreign chat ID(s).\n\n` +
+					`Last 5:\n${foreignList}\n\n` +
 					`This bot only responds to configured chat (ID: ${state.chatId}).`
 				)
 			}
@@ -917,7 +921,7 @@ async function pollFromTelegram(state: BotState): Promise<TelegramUpdate[]> {
 				expectedChatId: state.chatId,
 			})
 			const addResult = await ICloudCoordination.addForeignChatId(chatId, log)
-			if (addResult.status === "ok") {
+			if (addResult.status === "ok" && addResult.value === true) {
 				newForeignAdded = true
 			}
 		}
@@ -927,9 +931,13 @@ async function pollFromTelegram(state: BotState): Promise<TelegramUpdate[]> {
 			const allForeignResult = await ICloudCoordination.getForeignChatIds(log)
 			if (allForeignResult.status === "ok") {
 				const allForeign = allForeignResult.value
-				const foreignList = allForeign.map(id => `• ${id}`).join("\n")
+				const total = allForeign.length
+				// Show last 5 (most recent) foreign chat IDs
+				const recent = allForeign.slice(-5)
+				const foreignList = recent.map(id => `• ${id}`).join("\n")
 				await state.telegram.sendMessage(
-					`⚠️ Warning: This bot received messages from foreign chat IDs:\n\n${foreignList}\n\n` +
+					`⚠️ Warning: This bot received messages from ${total} foreign chat ID(s).\n\n` +
+					`Last 5:\n${foreignList}\n\n` +
 					`This bot only responds to configured chat (ID: ${state.chatId}).`
 				)
 			}
