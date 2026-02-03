@@ -2097,6 +2097,15 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 			propertiesKeys: ev.properties ? Object.keys(ev.properties) : [],
 			properties: ev.properties,
 		})
+		
+		const eventJson = JSON.stringify(ev, null, 2)
+		const message = `🔍 Unhandled OpenCode Event: \`${ev.type}\`\n\n\`\`\`json\n${eventJson}\`\`\``
+		const sendResult = await state.telegram.sendMessage(message)
+		if (sendResult.status === "error") {
+			log("error", "Failed to send unhandled event message", {
+				error: sendResult.error.message,
+			})
+		}
 	}
 }
 
