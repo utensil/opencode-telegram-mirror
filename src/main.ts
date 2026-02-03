@@ -1177,6 +1177,7 @@ async function handleTelegramMessage(
 			})
 			
 			const pid = process.pid!
+			log("info", "Started bash process", { pid, command: bashCode })
 			state.runningBashProcesses.set(pid, {
 				process,
 				command: bashCode,
@@ -1195,6 +1196,7 @@ async function handleTelegramMessage(
 			})
 			
 			process.on("close", async (code) => {
+				log("info", "Bash process closed", { pid, code })
 				state.runningBashProcesses.delete(pid)
 				const fullOutput = output + (errorOutput ? `\nSTDERR:\n${errorOutput}` : "")
 				if (code === 0) {
@@ -1389,9 +1391,15 @@ async function handleTelegramMessage(
 			// Kill specific PID (only if it's our tracked bash process)
 			if (state.runningBashProcesses.has(targetPid)) {
 				const info = state.runningBashProcesses.get(targetPid)!
-				info.process.kill("SIGTERM")
-				state.runningBashProcesses.delete(targetPid)
-				await state.telegram.sendMessage(`✅ Interrupted bash process PID ${targetPid}`)
+				log("info", "Killing specific bash process", { pid: targetPid, command: info.command })
+				try {
+					info.process.kill("SIGKILL") // Use SIGKILL for immediate termination
+					state.runningBashProcesses.delete(targetPid)
+					await state.telegram.sendMessage(`✅ Interrupted bash process PID ${targetPid}`)
+				} catch (error) {
+					log("error", "Failed to kill process", { pid: targetPid, error: String(error) })
+					await state.telegram.sendMessage(`❌ Failed to kill PID ${targetPid}: ${error}`)
+				}
 			} else {
 				await state.telegram.sendMessage(`❌ PID ${targetPid} not found in tracked bash processes`)
 			}
@@ -1401,14 +1409,21 @@ async function handleTelegramMessage(
 		// Kill all running bash processes
 		if (state.runningBashProcesses.size > 0) {
 			const pids = Array.from(state.runningBashProcesses.keys())
+			log("info", "Killing all bash processes", { pids })
+			let killedCount = 0
 			for (const pid of pids) {
 				const info = state.runningBashProcesses.get(pid)
 				if (info) {
-					info.process.kill("SIGTERM")
-					state.runningBashProcesses.delete(pid)
+					try {
+						info.process.kill("SIGKILL") // Use SIGKILL for immediate termination
+						state.runningBashProcesses.delete(pid)
+						killedCount++
+					} catch (error) {
+						log("error", "Failed to kill process", { pid, error: String(error) })
+					}
 				}
 			}
-			await state.telegram.sendMessage(`✅ Interrupted ${pids.length} running bash command(s)`)
+			await state.telegram.sendMessage(`✅ Interrupted ${killedCount} running bash command(s)`)
 			return
 		}
 		
