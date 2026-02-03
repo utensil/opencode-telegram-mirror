@@ -1379,7 +1379,7 @@ async function handleTelegramMessage(
 		return
 	}
 
-	const interruptMatch = messageText?.trim().match(/^\/interrupt(?:\s+(\d+))?$/)
+	const interruptMatch = messageText?.trim().match(/^\/(?:interrupt|int)(?:\s+(\d+))?$/)
 	if (interruptMatch) {
 		log("info", "Received /interrupt command")
 		
