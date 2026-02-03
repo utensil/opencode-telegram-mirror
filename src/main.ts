@@ -376,7 +376,7 @@ async function main() {
 	})
 
 	const commandsResult = await telegram.setMyCommands([
-		{ command: "interrupt", description: "Stop the current operation" },
+		{ command: "interrupt", description: "Stop operation or kill bash PID" },
 		{ command: "plan", description: "Switch to plan mode" },
 		{ command: "build", description: "Switch to build mode" },
 		{ command: "review", description: "Review changes [commit|branch|pr]" },
@@ -1146,8 +1146,12 @@ async function handleTelegramMessage(
 	if (messageText?.trim() === "/ps") {
 		log("info", "Received /ps command")
 		if (state.runningBashProcesses.size > 0) {
+			const now = Date.now()
 			const processes = Array.from(state.runningBashProcesses.entries())
-				.map(([pid, info]) => `• PID ${pid}: ${info.command}`)
+				.map(([pid, info]) => {
+					const elapsed = Math.round((now - info.startTime) / 1000)
+					return `• PID ${pid}: ${info.command} (${elapsed}s)`
+				})
 				.join('\n')
 			await state.telegram.sendMessage(`🔄 Running bash processes:\n${processes}`)
 		} else {
@@ -1375,8 +1379,24 @@ async function handleTelegramMessage(
 		return
 	}
 
-	if (messageText?.trim() === "/interrupt") {
+	const interruptMatch = messageText?.trim().match(/^\/interrupt(?:\s+(\d+))?$/)
+	if (interruptMatch) {
 		log("info", "Received /interrupt command")
+		
+		const targetPid = interruptMatch[1] ? parseInt(interruptMatch[1]) : null
+		
+		if (targetPid) {
+			// Kill specific PID (only if it's our tracked bash process)
+			if (state.runningBashProcesses.has(targetPid)) {
+				const info = state.runningBashProcesses.get(targetPid)!
+				info.process.kill("SIGTERM")
+				state.runningBashProcesses.delete(targetPid)
+				await state.telegram.sendMessage(`✅ Interrupted bash process PID ${targetPid}`)
+			} else {
+				await state.telegram.sendMessage(`❌ PID ${targetPid} not found in tracked bash processes`)
+			}
+			return
+		}
 		
 		// Kill all running bash processes
 		if (state.runningBashProcesses.size > 0) {
