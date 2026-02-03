@@ -168,6 +168,7 @@ interface BotState {
 	// iCloud device coordination
 	deviceId: string;
 	useICloudCoordination: boolean;
+	becameActiveAt: number | null; // Timestamp when device became active
 
 	assistantMessageIds: Set<string>;
 	pendingParts: Map<string, Part[]>;
@@ -363,6 +364,7 @@ async function main() {
 		needsTitle: !initialThreadTitle,
 		deviceId: coordination.deviceId,
 		useICloudCoordination: coordination.useICloud,
+		becameActiveAt: null,
 		assistantMessageIds: new Set(),
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
@@ -609,6 +611,7 @@ async function startUpdatesPoller(state: BotState) {
 				log("info", "Device became active, switching to fast heartbeat", {
 					deviceId: state.deviceId,
 				})
+				state.becameActiveAt = now
 				nextDeviceHeartbeat = now + 
 					ICloudCoordination.getRandomizedActiveHeartbeatInterval()
 				nextActiveHeartbeat = now + 
@@ -965,6 +968,15 @@ async function handleTelegramMessage(
 	// Ignore all bot messages - context is sent directly via OpenCode API
 	if (msg.from?.id === state.botUserId) {
 		log("debug", "Ignoring bot message")
+		return
+	}
+
+	// Ignore messages sent before this device became active (prevents race conditions)
+	if (state.becameActiveAt && msg.date * 1000 < state.becameActiveAt) {
+		log("debug", "Ignoring message sent before device became active", {
+			messageDate: new Date(msg.date * 1000).toISOString(),
+			becameActiveAt: new Date(state.becameActiveAt).toISOString(),
+		})
 		return
 	}
 
