@@ -173,6 +173,7 @@ interface BotState {
 	assistantMessageIds: Set<string>;
 	pendingParts: Map<string, Part[]>;
 	sentPartIds: Set<string>;
+	reasoningMessages?: Map<string, { messageId: number; content: string; lastUpdate: number }>;
 	typingIndicators: Map<
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
@@ -1886,14 +1887,14 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 			bumpTypingIndicator(key, typingMode)
 		}
 
-		// Send tools/reasoning immediately (except edit/write tools - wait for completion to get diff data)
+		// Send tools immediately (except edit/write tools - wait for completion to get diff data)
+		// Stream reasoning parts by collecting and updating a single message
 		const isEditOrWrite =
 			part.type === "tool" && (part.tool === "edit" || part.tool === "write")
 		if (
-			(part.type === "tool" &&
-				part.state?.status === "running" &&
-				!isEditOrWrite) ||
-			part.type === "reasoning"
+			part.type === "tool" &&
+			part.state?.status === "running" &&
+			!isEditOrWrite
 		) {
 			if (!state.sentPartIds.has(part.id)) {
 				const formatted = formatPart(part)
@@ -1912,6 +1913,50 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 					state.sentPartIds.add(part.id)
 				}
 			}
+		}
+
+		// Handle reasoning parts with streaming updates
+		if (part.type === "reasoning") {
+			const reasoningKey = `${key}:reasoning`
+			if (!state.reasoningMessages) {
+				state.reasoningMessages = new Map()
+			}
+			
+			let reasoningState = state.reasoningMessages.get(reasoningKey)
+			if (!reasoningState) {
+				const formatted = formatPart(part)
+				if (formatted.trim()) {
+					const sendResult = await state.telegram.sendMessage(formatted)
+					if (sendResult.status === "ok") {
+						reasoningState = {
+							messageId: sendResult.value.message_id,
+							content: part.text || "",
+							lastUpdate: Date.now()
+						}
+						state.reasoningMessages.set(reasoningKey, reasoningState)
+						log("debug", "📤 Started reasoning stream", { partId: part.id })
+					}
+				}
+			} else {
+				// Update existing reasoning message
+				reasoningState.content = part.text || ""
+				const now = Date.now()
+				// Throttle updates to avoid rate limits (max once per 2 seconds)
+				if (now - reasoningState.lastUpdate > 2000) {
+					const formatted = formatPart({ ...part, text: reasoningState.content })
+					if (formatted.trim()) {
+						const editResult = await state.telegram.editMessage(
+							reasoningState.messageId,
+							formatted
+						)
+						if (editResult.status === "ok") {
+							reasoningState.lastUpdate = now
+							log("debug", "📝 Updated reasoning stream", { partId: part.id })
+						}
+					}
+				}
+			}
+			state.sentPartIds.add(part.id)
 		}
 
 		// On step-finish, send remaining parts
