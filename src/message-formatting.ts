@@ -137,7 +137,7 @@ export function formatPart(part: Part): string {
 
   if (part.type === "reasoning") {
     if (!part.text?.trim()) return ""
-    const truncated = part.text.length > 100 ? part.text.slice(0, 100) + "…" : part.text
+    const truncated = part.text.length > 500 ? part.text.slice(0, 500) + "…" : part.text
     return `> thinking: ${truncated}`
   }
 
