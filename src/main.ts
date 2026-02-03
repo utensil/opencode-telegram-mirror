@@ -1652,19 +1652,21 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		ev.properties?.session?.id
 	const sessionTitle = ev.properties?.session?.title
 
-	// AGENT-NOTE: Enhanced logging for all OpenCode events
-	log("debug", "📥 OpenCode event received", {
-		type: ev.type,
-		sessionId,
-		sessionTitle,
-		timestamp: new Date().toISOString(),
-		propertiesKeys: ev.properties ? Object.keys(ev.properties) : [],
-		hasInfo: !!ev.properties?.info,
-		hasPart: !!ev.properties?.part,
-		hasSession: !!ev.properties?.session,
-		hasStatus: !!ev.properties?.status,
-		hasError: !!ev.properties?.error,
-	})
+	// AGENT-NOTE: Enhanced logging for all OpenCode events (except session.diff - too verbose)
+	if (ev.type !== "session.diff") {
+		log("debug", "📥 OpenCode event received", {
+			type: ev.type,
+			sessionId,
+			sessionTitle,
+			timestamp: new Date().toISOString(),
+			propertiesKeys: ev.properties ? Object.keys(ev.properties) : [],
+			hasInfo: !!ev.properties?.info,
+			hasPart: !!ev.properties?.part,
+			hasSession: !!ev.properties?.session,
+			hasStatus: !!ev.properties?.status,
+			hasError: !!ev.properties?.error,
+		})
+	}
 
 	// Log errors in full and send to Telegram
 	if (ev.type === "session.error") {
@@ -2085,6 +2087,7 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		"session.error", 
 		"session.status", 
 		"session.idle", 
+		"session.diff",
 		"message.updated", 
 		"message.part.updated", 
 		"question.asked", 
@@ -2098,8 +2101,25 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 			properties: ev.properties,
 		})
 		
-		const eventJson = JSON.stringify(ev, null, 2)
-		const message = `🔍 Unhandled OpenCode Event: \`${ev.type}\`\n\n\`\`\`json\n${eventJson}\`\`\``
+		// Convert to YAML-like format
+		const toYaml = (obj: any, indent = 0): string => {
+			const spaces = '  '.repeat(indent)
+			if (obj === null || obj === undefined) return 'null'
+			if (typeof obj === 'string') return obj
+			if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj)
+			if (Array.isArray(obj)) {
+				return obj.map(item => `${spaces}- ${toYaml(item, indent + 1)}`).join('\n')
+			}
+			if (typeof obj === 'object') {
+				return Object.entries(obj).map(([key, value]) => 
+					`${spaces}${key}: ${toYaml(value, indent + 1)}`
+				).join('\n')
+			}
+			return String(obj)
+		}
+		
+		const eventYaml = toYaml(ev)
+		const message = `🔍 Unhandled OpenCode Event: \`${ev.type}\`\n\n\`\`\`yaml\n${eventYaml}\`\`\``
 		const sendResult = await state.telegram.sendMessage(message)
 		if (sendResult.status === "error") {
 			log("error", "Failed to send unhandled event message", {
