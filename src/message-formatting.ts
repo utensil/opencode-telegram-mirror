@@ -140,7 +140,7 @@ export function formatPart(part: Part): string {
     const cleanText = part.text.replace(/\n/g, ' ')
     const MAX_SEGMENT = 30
     if (cleanText.length <= MAX_SEGMENT * 2) {
-      return `> thinking: ${cleanText}`
+      return `> thinking: ${cleanText}…`
     }
     const beginning = cleanText.slice(0, MAX_SEGMENT)
     const end = cleanText.slice(-MAX_SEGMENT)
@@ -148,7 +148,7 @@ export function formatPart(part: Part): string {
     const midPoint = Math.floor(cleanText.length / 2)
     const safeBeginning = beginning.length > midPoint ? cleanText.slice(0, midPoint) : beginning
     const safeEnd = cleanText.length - end.length < midPoint ? cleanText.slice(midPoint) : end
-    return `> thinking: ${safeBeginning}…${safeEnd}`
+    return `> thinking: ${safeBeginning}…${safeEnd}…`
   }
 
   if (part.type === "file") {
