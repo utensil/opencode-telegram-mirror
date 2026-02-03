@@ -380,6 +380,7 @@ async function main() {
 		{ command: "build", description: "Switch to build mode" },
 		{ command: "review", description: "Review changes [commit|branch|pr]" },
 		{ command: "rename", description: "Rename the session" },
+		{ command: "run", description: "Execute bash command" },
 		{ command: "version", description: "Show mirror bot version" },
 		{ command: "dev", description: "List all devices" },
 		{ command: "use", description: "Activate device by number" },
@@ -1135,6 +1136,30 @@ async function handleTelegramMessage(
 			log("error", "Failed to send version response", {
 				error: sendResult.error.message,
 			})
+		}
+		return
+	}
+
+	const runMatch = messageText?.trim().match(/^\/run\s+(.+)$/)
+	if (runMatch) {
+		const bashCode = runMatch[1].trim()
+		if (!bashCode) {
+			await state.telegram.sendMessage("Usage: /run <bash command>\nExample: /run ls -la")
+			return
+		}
+		log("info", "Received /run command", { bashCode })
+		
+		try {
+			const { execSync } = await import("node:child_process")
+			const output = execSync(bashCode, { 
+				encoding: 'utf8', 
+				cwd: state.directory,
+				timeout: 30000 // 30 second timeout
+			})
+			await state.telegram.sendMessage(`\`\`\`\n${output}\`\`\``)
+		} catch (error: any) {
+			const errorMsg = error.message || String(error)
+			await state.telegram.sendMessage(`❌ Command failed:\n\`\`\`\n${errorMsg}\`\`\``)
 		}
 		return
 	}
