@@ -343,13 +343,14 @@ export async function getDeviceStatus(
   const state = stateResult.value
   const devices = devicesResult.value
 
-  // Sort devices: active first, then by lastSeen (most recent first)
+  // Sort devices: active first, then alphabetically by name (stable ordering)
   const sortedDevices = Object.values(devices).sort((a, b) => {
     const aIsActive = state.activeDevice === a.name
     const bIsActive = state.activeDevice === b.name
     if (aIsActive && !bIsActive) return -1
     if (!aIsActive && bIsActive) return 1
-    return b.lastSeen - a.lastSeen
+    // Alphabetical sort for stable ordering
+    return a.name.localeCompare(b.name)
   })
 
   const deviceList = sortedDevices.map((dev, index) => ({
