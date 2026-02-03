@@ -298,6 +298,7 @@ async function main() {
 		{ command: "dev", description: "List all devices" },
 		{ command: "use", description: "Activate device by number" },
 		{ command: "restart", description: "Restart the bot safely with rollback" },
+		{ command: "start", description: "Start a new mirror instance" },
 	])
 	if (commandsResult.status === "error") {
 		log("warn", "Failed to set bot commands", { error: commandsResult.error.message })
@@ -949,6 +950,23 @@ async function handleTelegramMessage(
 		await state.telegram.sendMessage("Restarting bot safely with automatic rollback...")
 		const { spawn } = await import("node:child_process")
 		spawn(".agents/scripts/safe-restart.sh", {
+			detached: true,
+			stdio: "ignore",
+		})
+		return
+	}
+
+	const startMatch = messageText?.trim().match(/^\/start\s+(.+)$/)
+	if (startMatch) {
+		const directory = startMatch[1].trim()
+		if (!directory) {
+			await state.telegram.sendMessage("Usage: /start <directory>\nExample: /start /Users/me/project")
+			return
+		}
+		log("info", "Received /start command", { directory })
+		await state.telegram.sendMessage(`Starting new mirror instance in: ${directory}`)
+		const { spawn } = await import("node:child_process")
+		spawn(".agents/scripts/start-new-instance.sh", [directory], {
 			detached: true,
 			stdio: "ignore",
 		})
