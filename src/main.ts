@@ -380,7 +380,7 @@ async function main() {
 		{ command: "build", description: "Switch to build mode" },
 		{ command: "review", description: "Review changes [commit|branch|pr]" },
 		{ command: "rename", description: "Rename the session" },
-		{ command: "run", description: "Execute bash command" },
+		{ command: "cap", description: "Capture bash command output" },
 		{ command: "version", description: "Show mirror bot version" },
 		{ command: "dev", description: "List all devices" },
 		{ command: "use", description: "Activate device by number" },
@@ -1140,14 +1140,14 @@ async function handleTelegramMessage(
 		return
 	}
 
-	const runMatch = messageText?.trim().match(/^\/run\s+(.+)$/)
-	if (runMatch) {
-		const bashCode = runMatch[1].trim()
+	const capMatch = messageText?.trim().match(/^\/cap\s+(.+)$/)
+	if (capMatch) {
+		const bashCode = capMatch[1].trim()
 		if (!bashCode) {
-			await state.telegram.sendMessage("Usage: /run <bash command>\nExample: /run ls -la")
+			await state.telegram.sendMessage("Usage: /cap <bash command>\nExample: /cap ls -la")
 			return
 		}
-		log("info", "Received /run command", { bashCode })
+		log("info", "Received /cap command", { bashCode })
 		
 		try {
 			const { execSync } = await import("node:child_process")
