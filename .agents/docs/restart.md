@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes how to safely restart the OpenCode Telegram Mirror bot with automatic rollback on failure.
+This document describes how to safely restart the **active bot instance** with automatic rollback on failure.
 
 ## ⚠️ Critical Requirement: Detached Execution
 
@@ -22,7 +22,7 @@ When the bot executes a command, that command runs as a **child process**. If yo
 ```
 
 **What it does:**
-1. Finds the current mirror bot PID automatically
+1. Finds the active bot PID automatically
 2. Calls `restart-with-rollback.sh` with that PID
 3. Exits immediately (script continues detached)
 
@@ -52,7 +52,7 @@ When the bot executes a command, that command runs as a **child process**. If yo
 
 ### Scenario 1: Testing New Code
 
-You've made changes and want to restart the bot:
+You've made changes and want to restart the active bot:
 ```
 You: "restart safely per restart.md"
 AI: Executes .agents/scripts/safe-restart.sh
@@ -60,9 +60,9 @@ AI: Executes .agents/scripts/safe-restart.sh
 
 If new code has bugs → automatic rollback to previous working commit.
 
-### Scenario 2: Bot is Unresponsive
+### Scenario 2: Active Bot is Unresponsive
 
-Bot stopped responding but process is still alive:
+Active bot stopped responding but process is still alive:
 ```bash
 # Manual execution in terminal
 .agents/scripts/safe-restart.sh
