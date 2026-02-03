@@ -175,9 +175,6 @@ interface BotState {
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
 	>;
-
-	// Security: track last foreign chat warning to avoid spam
-	lastForeignChatWarning: number;
 }
 
 async function main() {
@@ -362,7 +359,6 @@ async function main() {
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
 		typingIndicators: new Map(),
-		lastForeignChatWarning: 0,
 	}
 
 	if (initialThreadTitle && config.threadId) {
@@ -821,30 +817,35 @@ async function pollFromDO(state: BotState): Promise<TelegramUpdate[]> {
 	
 	// Filter to our chat and track foreign chats
 	const updates: TelegramUpdate[] = []
-	let lastForeignChatId: number | null = null
+	const foreignChatIds: Set<number> = new Set()
 	
 	for (const update of allUpdates) {
 		const chatId = update.message?.chat.id || update.callback_query?.message?.chat.id
 		if (String(chatId) === state.chatId) {
 			updates.push(update)
 		} else if (chatId) {
-			lastForeignChatId = chatId
+			foreignChatIds.add(chatId)
 		}
 	}
 	
-	// Warn about foreign chat attempts
-	if (lastForeignChatId !== null) {
-		log("warn", "Ignoring message from foreign chat", {
-			foreignChatId: lastForeignChatId,
-			expectedChatId: state.chatId,
-		})
+	// Handle foreign chat attempts
+	if (foreignChatIds.size > 0 && state.useICloudCoordination) {
+		for (const chatId of foreignChatIds) {
+			log("warn", "Ignoring message from foreign chat", {
+				foreignChatId: chatId,
+				expectedChatId: state.chatId,
+			})
+			await ICloudCoordination.addForeignChatId(chatId, log)
+		}
 		
-		if (state.lastForeignChatWarning === 0) {
+		const allForeignResult = await ICloudCoordination.getForeignChatIds(log)
+		if (allForeignResult.status === "ok") {
+			const allForeign = allForeignResult.value
+			const foreignList = allForeign.map(id => `• ${id}`).join("\n")
 			await state.telegram.sendMessage(
-				`⚠️ Warning: Received messages from another chat (ID: ${lastForeignChatId}). ` +
+				`⚠️ Warning: This bot received messages from foreign chat IDs:\n\n${foreignList}\n\n` +
 				`This bot only responds to configured chat (ID: ${state.chatId}).`
 			)
-			state.lastForeignChatWarning = 1
 		}
 	}
 
@@ -884,7 +885,7 @@ async function pollFromTelegram(state: BotState): Promise<TelegramUpdate[]> {
 
 	// Filter to our chat and update last ID
 	const updates: TelegramUpdate[] = []
-	let lastForeignChatId: number | null = null
+	const foreignChatIds: Set<number> = new Set()
 	
 	for (const update of data.result) {
 		setLastUpdateId(update.update_id, log)
@@ -894,23 +895,30 @@ async function pollFromTelegram(state: BotState): Promise<TelegramUpdate[]> {
 		if (String(chatId) === state.chatId) {
 			updates.push(update)
 		} else if (chatId) {
-			lastForeignChatId = chatId
+			foreignChatIds.add(chatId)
 		}
 	}
 	
-	// Warn about foreign chat attempts
-	if (lastForeignChatId !== null) {
-		log("warn", "Ignoring message from foreign chat", {
-			foreignChatId: lastForeignChatId,
-			expectedChatId: state.chatId,
-		})
+	// Handle foreign chat attempts
+	if (foreignChatIds.size > 0 && state.useICloudCoordination) {
+		// Add each foreign chat ID to iCloud state
+		for (const chatId of foreignChatIds) {
+			log("warn", "Ignoring message from foreign chat", {
+				foreignChatId: chatId,
+				expectedChatId: state.chatId,
+			})
+			await ICloudCoordination.addForeignChatId(chatId, log)
+		}
 		
-		if (state.lastForeignChatWarning === 0) {
+		// Get all foreign chat IDs and send warning
+		const allForeignResult = await ICloudCoordination.getForeignChatIds(log)
+		if (allForeignResult.status === "ok") {
+			const allForeign = allForeignResult.value
+			const foreignList = allForeign.map(id => `• ${id}`).join("\n")
 			await state.telegram.sendMessage(
-				`⚠️ Warning: Received messages from another chat (ID: ${lastForeignChatId}). ` +
+				`⚠️ Warning: This bot received messages from foreign chat IDs:\n\n${foreignList}\n\n` +
 				`This bot only responds to configured chat (ID: ${state.chatId}).`
 			)
-			state.lastForeignChatWarning = 1
 		}
 	}
 

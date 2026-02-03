@@ -49,6 +49,7 @@ export interface CoordinatorState {
   lastUpdateId: number             // Last processed Telegram update_id
   lastModified: number             // Last state modification time
   modifiedBy: string               // Which device modified this
+  foreignChatIds: number[]         // Foreign chat IDs that tried to connect
 }
 
 // ============================================================================
@@ -128,6 +129,7 @@ export async function initCoordinator(log?: LogFn): Promise<Result<void, Coordin
           lastUpdateId: 0,
           lastModified: Date.now(),
           modifiedBy: "system",
+          foreignChatIds: [],
         }
         await writeFile(STATE_FILE, JSON.stringify(initialState, null, 2))
         log?.("info", "Created initial state file", { path: STATE_FILE })
@@ -154,6 +156,14 @@ export async function readState(log?: LogFn): Promise<Result<CoordinatorState, C
     try: async () => {
       const content = await readFile(STATE_FILE, "utf-8")
       const state = JSON.parse(content) as CoordinatorState
+      
+      // Migration: ensure foreignChatIds exists
+      if (!state.foreignChatIds) {
+        state.foreignChatIds = []
+        await writeFile(STATE_FILE, JSON.stringify(state, null, 2))
+        log?.("info", "Migrated state to include foreignChatIds")
+      }
+      
       log?.("debug", "Read coordinator state", { activeDevice: state.activeDevice })
       return state
     },
@@ -180,6 +190,62 @@ export async function writeState(
     catch: (error) =>
       new CoordinatorError({
         message: `Failed to write state: ${String(error)}`,
+        cause: error,
+      }),
+  })
+}
+
+/**
+ * Add a foreign chat ID that tried to connect
+ */
+export async function addForeignChatId(
+  chatId: number,
+  log?: LogFn
+): Promise<Result<void, CoordinatorError>> {
+  return Result.tryPromise({
+    try: async () => {
+      const currentStateResult = await readState(log)
+      if (currentStateResult.status === "error") {
+        throw currentStateResult.error
+      }
+      
+      const state = currentStateResult.value
+      
+      // Only add if not already in the list
+      if (!state.foreignChatIds.includes(chatId)) {
+        state.foreignChatIds.push(chatId)
+        state.lastModified = Date.now()
+        state.modifiedBy = "foreign-chat-tracker"
+        
+        await writeFile(STATE_FILE, JSON.stringify(state, null, 2))
+        log?.("info", "Added foreign chat ID", { chatId, totalForeignChats: state.foreignChatIds.length })
+      }
+    },
+    catch: (error) =>
+      new CoordinatorError({
+        message: `Failed to add foreign chat ID: ${String(error)}`,
+        cause: error,
+      }),
+  })
+}
+
+/**
+ * Get all foreign chat IDs
+ */
+export async function getForeignChatIds(
+  log?: LogFn
+): Promise<Result<number[], CoordinatorError>> {
+  return Result.tryPromise({
+    try: async () => {
+      const stateResult = await readState(log)
+      if (stateResult.status === "error") {
+        return []
+      }
+      return stateResult.value.foreignChatIds
+    },
+    catch: (error) =>
+      new CoordinatorError({
+        message: `Failed to get foreign chat IDs: ${String(error)}`,
         cause: error,
       }),
   })

@@ -451,3 +451,22 @@ export async function cleanupStaleDevices(
   return icloud.cleanupStaleDevices(log)
 }
 
+/**
+ * Add a foreign chat ID that tried to connect
+ */
+export async function addForeignChatId(
+  chatId: number,
+  log: LogFn
+): Promise<Result<void, CoordinatorError>> {
+  return icloud.addForeignChatId(chatId, log)
+}
+
+/**
+ * Get all foreign chat IDs
+ */
+export async function getForeignChatIds(
+  log: LogFn
+): Promise<Result<number[], CoordinatorError>> {
+  return icloud.getForeignChatIds(log)
+}
+
