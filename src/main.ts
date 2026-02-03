@@ -197,6 +197,7 @@ interface BotState {
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
 	>;
+	runningBashProcess: any | null; // Track running bash process
 }
 
 async function main() {
@@ -455,6 +456,7 @@ async function main() {
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
 		typingIndicators: new Map(),
+		runningBashProcess: null,
 	}
 
 	if (initialThreadTitle && config.threadId) {
@@ -1149,15 +1151,51 @@ async function handleTelegramMessage(
 		}
 		log("info", "Received /cap command", { bashCode })
 		
+		if (state.runningBashProcess) {
+			await state.telegram.sendMessage("❌ Another bash command is already running. Use /interrupt to stop it.")
+			return
+		}
+		
 		try {
-			const { execSync } = await import("node:child_process")
-			const output = execSync(bashCode, { 
-				encoding: 'utf8', 
+			const { spawn } = await import("node:child_process")
+			const process = spawn("bash", ["-c", bashCode], { 
 				cwd: state.directory,
-				timeout: 30000 // 30 second timeout
+				stdio: "pipe"
 			})
-			await state.telegram.sendMessage(`\`\`\`\n${output}\`\`\``)
+			
+			state.runningBashProcess = process
+			let output = ""
+			let errorOutput = ""
+			
+			process.stdout?.on("data", (data) => {
+				output += data.toString()
+			})
+			
+			process.stderr?.on("data", (data) => {
+				errorOutput += data.toString()
+			})
+			
+			process.on("close", async (code) => {
+				state.runningBashProcess = null
+				const fullOutput = output + (errorOutput ? `\nSTDERR:\n${errorOutput}` : "")
+				if (code === 0) {
+					await state.telegram.sendMessage(`\`\`\`\n${fullOutput || "(no output)"}\`\`\``)
+				} else {
+					await state.telegram.sendMessage(`❌ Command failed (exit code ${code}):\n\`\`\`\n${fullOutput}\`\`\``)
+				}
+			})
+			
+			// 30 second timeout
+			setTimeout(() => {
+				if (state.runningBashProcess === process) {
+					process.kill("SIGTERM")
+					state.runningBashProcess = null
+					state.telegram.sendMessage("❌ Command timed out after 30 seconds")
+				}
+			}, 30000)
+			
 		} catch (error: any) {
+			state.runningBashProcess = null
 			const errorMsg = error.message || String(error)
 			await state.telegram.sendMessage(`❌ Command failed:\n\`\`\`\n${errorMsg}\`\`\``)
 		}
@@ -1325,6 +1363,15 @@ async function handleTelegramMessage(
 
 	if (messageText?.trim() === "/interrupt") {
 		log("info", "Received /interrupt command")
+		
+		// Kill running bash process if any
+		if (state.runningBashProcess) {
+			state.runningBashProcess.kill("SIGTERM")
+			state.runningBashProcess = null
+			await state.telegram.sendMessage("✅ Interrupted running bash command")
+			return
+		}
+		
 		if (state.sessionId) {
 			const abortResult = await state.server.client.session.abort({
 				sessionID: state.sessionId,
