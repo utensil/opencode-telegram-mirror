@@ -137,7 +137,7 @@ export function formatPart(part: Part): string {
 
   if (part.type === "reasoning") {
     if (!part.text?.trim()) return ""
-    const MAX_SEGMENT = 100
+    const MAX_SEGMENT = 30
     if (part.text.length <= MAX_SEGMENT * 2) {
       return `> thinking: ${part.text}`
     }
