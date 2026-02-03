@@ -56,8 +56,27 @@ import {
 	getVoiceNotSupportedMessage,
 } from "./voice"
 import * as ICloudCoordination from "./icloud-integration"
+import { execSync } from "node:child_process"
 
 const log = createLogger()
+
+/**
+ * Get current commit information using jj
+ */
+function getCurrentCommitInfo(): string {
+	try {
+		const output = execSync(
+			'jj log -r @- -T \'committer.timestamp() ++ " " ++ change_id.short() ++ " " ++ commit_id.short() ++ " " ++ local_bookmarks ++ " " ++ description\'',
+			{ encoding: 'utf8', cwd: process.cwd() }
+		).trim()
+		// Remove the first line which contains the commit symbol and formatting
+		const lines = output.split('\n')
+		return lines[0].replace(/^◆\s+/, '')
+	} catch (error) {
+		log("warn", "Failed to get commit info", { error: String(error) })
+		return "commit info unavailable"
+	}
+}
 
 /**
  * Update the pinned status message with a new state
@@ -684,7 +703,10 @@ async function startUpdatesPoller(state: BotState) {
 					ICloudCoordination.getRandomizedActiveHeartbeatInterval()
 				
 				// Notify Telegram that this device is now active
-				await state.telegram.sendMessage(`✅ Device "${state.deviceId}" is now ACTIVE and ready`)
+				const commitInfo = getCurrentCommitInfo()
+				await state.telegram.sendMessage(`✅ I'm alive and ready! On the following commit:
+
+${commitInfo}`)
 			} else if (!isActive && wasActive) {
 				// Just became standby - reset to SLOW heartbeat
 				log("info", "🔴 Device became standby, switching to slow heartbeat", {
