@@ -1128,6 +1128,32 @@ async function handleTelegramMessage(
 		return
 	}
 
+	if (messageText?.trim() === "/upgrade") {
+		log("info", "Received /upgrade command")
+		await state.telegram.sendMessage("Fetching latest changes and restarting...")
+		const { spawn } = await import("node:child_process")
+		
+		// First run jj f (fetch)
+		const jjProcess = spawn("jj", ["f"], {
+			stdio: "pipe",
+		})
+		
+		jjProcess.on("close", (code) => {
+			if (code === 0) {
+				// If fetch succeeded, restart
+				spawn(".agents/scripts/safe-restart.sh", {
+					detached: true,
+					stdio: "ignore",
+				})
+			} else {
+				// If fetch failed, notify user
+				state.telegram.sendMessage("❌ Failed to fetch changes. Restart cancelled.")
+			}
+		})
+		
+		return
+	}
+
 	const startMatch = messageText?.trim().match(/^\/start\s+(.+)$/)
 	if (startMatch) {
 		const directory = startMatch[1].trim()
