@@ -1620,7 +1620,30 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 
 	if (!sessionId || sessionId !== state.sessionId) return
 
-	// Stop typing when session becomes idle
+	if (ev.type === "session.status") {
+		const status = ev.properties?.status
+		if (status?.type === "retry") {
+			const message = status.message || "Request is being retried"
+			const attempt = status.attempt || 1
+			const nextTime = status.next ? new Date(status.next).toLocaleTimeString() : "soon"
+			
+			await state.telegram.sendMessage(
+				`⏳ Retry attempt ${attempt}: ${message}\nNext attempt at ${nextTime}`
+			)
+			log("info", "🔄 OpenCode retry status sent to Telegram", { 
+				attempt, 
+				message: status.message 
+			})
+		} else if (status?.type === "error") {
+			const message = status.message || "An error occurred"
+			await state.telegram.sendMessage(`❌ Error: ${message}`)
+			log("info", "❌ OpenCode error status sent to Telegram", { 
+				message: status.message 
+			})
+		}
+		return
+	}
+
 	if (ev.type === "session.idle") {
 		for (const [key, entry] of state.typingIndicators) {
 			if (key.startsWith(`${sessionId}:`)) {
