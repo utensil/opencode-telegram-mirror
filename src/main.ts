@@ -1942,7 +1942,7 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 				}
 			} else {
 				// Update existing reasoning message
-				reasoningState.content += part.text || ""
+				reasoningState.content = part.text || ""
 				const now = Date.now()
 				
 				// Throttle updates to avoid rate limits (max once per 2 seconds)
