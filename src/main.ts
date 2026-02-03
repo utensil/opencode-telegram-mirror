@@ -609,7 +609,7 @@ async function startUpdatesPoller(state: BotState) {
 			
 			if (isActive && !wasActive) {
 				// Just became active - reset to FAST heartbeat
-				log("info", colorize("Device became active, switching to fast heartbeat", "green"), {
+				log("info", colorize("🟢 Device became active, switching to fast heartbeat", "green"), {
 					deviceId: state.deviceId,
 				})
 				state.becameActiveAt = now
@@ -619,7 +619,7 @@ async function startUpdatesPoller(state: BotState) {
 					ICloudCoordination.getRandomizedActiveHeartbeatInterval()
 			} else if (!isActive && wasActive) {
 				// Just became standby - reset to SLOW heartbeat
-				log("info", "Device became standby, switching to slow heartbeat", {
+				log("info", "🔴 Device became standby, switching to slow heartbeat", {
 					deviceId: state.deviceId,
 				})
 				nextDeviceHeartbeat = now + 
@@ -734,7 +734,7 @@ async function startUpdatesPoller(state: BotState) {
 
 			if (updates.length > 0) {
 				totalUpdatesProcessed += updates.length
-				log("info", "Received updates", {
+				log("info", "📨 Received updates", {
 					count: updates.length,
 					totalProcessed: totalUpdatesProcessed,
 					pollDuration: `${pollDuration}ms`,
@@ -1268,7 +1268,7 @@ async function handleTelegramMessage(
 		return
 	}
 
-	log("info", "Received message", {
+	log("info", "💬 Received message", {
 		from: msg.from?.username,
 		preview: messageText?.slice(0, 50) ?? (msg.voice ? "[voice]" : "[photo]"),
 	})
@@ -1431,7 +1431,7 @@ async function handleTelegramMessage(
 			log("error", "Prompt failed", { error: String(err) })
 		})
 
-	log("info", "Prompt sent", { sessionId: state.sessionId })
+	log("info", "🚀 Prompt sent", { sessionId: state.sessionId })
 
 	if (state.needsTitle && state.sessionId) {
 		const textContent = parts
