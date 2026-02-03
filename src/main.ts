@@ -23,7 +23,7 @@ import {
 } from "./opencode"
 import { TelegramClient, type TelegramVoice } from "./telegram"
 import { loadConfig } from "./config"
-import { createLogger } from "./log"
+import { createLogger, colorize } from "./log"
 import {
 	getSessionId,
 	setSessionId,
@@ -609,7 +609,7 @@ async function startUpdatesPoller(state: BotState) {
 			
 			if (isActive && !wasActive) {
 				// Just became active - reset to FAST heartbeat
-				log("info", "Device became active, switching to fast heartbeat", {
+				log("info", colorize("Device became active, switching to fast heartbeat", "green"), {
 					deviceId: state.deviceId,
 				})
 				state.becameActiveAt = now
