@@ -1591,7 +1591,12 @@ interface OpenCodeEvent {
 }
 
 async function subscribeToEvents(state: BotState) {
-	log("info", "🔌 Subscribing to OpenCode events")
+	log("info", "🔌 Subscribing to OpenCode events", {
+		directory: state.directory,
+		sessionId: state.sessionId,
+		chatId: state.chatId,
+		threadId: state.threadId,
+	})
 
 	try {
 		const eventsResult = await state.server.client.event.subscribe(
@@ -1602,24 +1607,38 @@ async function subscribeToEvents(state: BotState) {
 		const stream = eventsResult.stream
 		if (!stream) throw new Error("No event stream")
 
-		log("info", "✅ Event stream connected")
+		log("info", "✅ Event stream connected", {
+			directory: state.directory,
+			sessionId: state.sessionId,
+		})
 
 		for await (const event of stream) {
 			try {
-				log("debug", "⚡ OpenCode event received", { type: event.type })
 				await handleOpenCodeEvent(state, event as OpenCodeEvent)
 			} catch (error) {
-				log("error", "Event error", { error: String(error) })
+				log("error", "❌ Event handling error", { 
+					eventType: event.type,
+					error: String(error),
+					stack: error instanceof Error ? error.stack : undefined,
+				})
 			}
 		}
 
-		log("warn", "Event stream ended")
+		log("warn", "⚠️ Event stream ended unexpectedly", {
+			directory: state.directory,
+			sessionId: state.sessionId,
+		})
 	} catch (error) {
-		log("error", "Event subscription error", { error: String(error) })
+		log("error", "❌ Event subscription error", { 
+			directory: state.directory,
+			error: String(error),
+			stack: error instanceof Error ? error.stack : undefined,
+		})
 	}
 
 	// Retry
 	if (getServer()) {
+		log("info", "🔄 Retrying event subscription in 5 seconds")
 		await Bun.sleep(5000)
 		subscribeToEvents(state)
 	}
@@ -1632,6 +1651,20 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		ev.properties?.part?.sessionID ??
 		ev.properties?.session?.id
 	const sessionTitle = ev.properties?.session?.title
+
+	// AGENT-NOTE: Enhanced logging for all OpenCode events
+	log("debug", "📥 OpenCode event received", {
+		type: ev.type,
+		sessionId,
+		sessionTitle,
+		timestamp: new Date().toISOString(),
+		propertiesKeys: ev.properties ? Object.keys(ev.properties) : [],
+		hasInfo: !!ev.properties?.info,
+		hasPart: !!ev.properties?.part,
+		hasSession: !!ev.properties?.session,
+		hasStatus: !!ev.properties?.status,
+		hasError: !!ev.properties?.error,
+	})
 
 	// Log errors in full and send to Telegram
 	if (ev.type === "session.error") {
@@ -1674,6 +1707,15 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 
 	if (ev.type === "session.status") {
 		const status = ev.properties?.status
+		log("info", "📊 Session status update", {
+			sessionId,
+			statusType: status?.type,
+			statusMessage: status?.message,
+			attempt: status?.attempt,
+			next: status?.next,
+			fullStatus: status,
+		})
+		
 		if (status?.type === "retry") {
 			const message = status.message || "Request is being retried"
 			const attempt = status.attempt || 1
@@ -1697,6 +1739,13 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 	}
 
 	if (ev.type === "session.idle") {
+		log("info", "💤 Session became idle", {
+			sessionId,
+			activeTypingIndicators: Array.from(state.typingIndicators.keys()).filter(key => 
+				key.startsWith(`${sessionId}:`)
+			),
+		})
+		
 		for (const [key, entry] of state.typingIndicators) {
 			if (key.startsWith(`${sessionId}:`)) {
 				if (entry.timeout) clearTimeout(entry.timeout)
@@ -1738,6 +1787,16 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 
 	if (ev.type === "message.updated") {
 		const info = ev.properties.info
+		log("debug", "💬 Message updated", {
+			sessionId,
+			messageId: info?.id,
+			role: info?.role,
+			content: info?.content ? `${info.content.substring(0, 100)}...` : null,
+			contentLength: info?.content?.length,
+			hasAttachments: !!info?.attachments?.length,
+			attachmentCount: info?.attachments?.length || 0,
+		})
+		
 		if (info?.role === "assistant") {
 			const key = `${info.sessionID}:${info.id}`
 			state.assistantMessageIds.add(key)
@@ -1798,10 +1857,17 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 			}, 12000)
 		}
 
-		log("debug", "Processing message part", {
+		log("debug", "🧩 Processing message part", {
 			key,
 			partType: part.type,
 			partId: part.id,
+			tool: part.tool,
+			state: part.state?.status,
+			hasContent: !!part.content,
+			contentLength: part.content?.length,
+			hasInput: !!part.state?.input,
+			inputKeys: part.state?.input ? Object.keys(part.state.input) : [],
+			hasOutput: !!part.state?.output,
 		})
 
 		const existing = state.pendingParts.get(key) ?? []
@@ -1972,6 +2038,16 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 	const threadId = state.threadId ?? null
 
 	if (ev.type === "question.asked") {
+		const request = ev.properties as unknown as QuestionRequest
+		log("info", "❓ Question asked", {
+			sessionId,
+			questionType: request?.type,
+			questionText: request?.question,
+			hasOptions: !!request?.options?.length,
+			optionCount: request?.options?.length || 0,
+			options: request?.options,
+		})
+		
 		await showQuestionButtons({
 			telegram: state.telegram,
 			chatId: Number(state.chatId),
@@ -1984,6 +2060,15 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 	}
 
 	if (ev.type === "permission.asked") {
+		const request = ev.properties as unknown as PermissionRequest
+		log("info", "🔐 Permission requested", {
+			sessionId,
+			permissionType: request?.type,
+			resource: request?.resource,
+			action: request?.action,
+			message: request?.message,
+		})
+		
 		await showPermissionButtons({
 			telegram: state.telegram,
 			chatId: Number(state.chatId),
@@ -1992,6 +2077,25 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 			request: ev.properties as unknown as PermissionRequest,
 			directory: state.directory,
 			log,
+		})
+	}
+
+	// AGENT-NOTE: Log any unhandled event types for debugging
+	const handledTypes = [
+		"session.error", 
+		"session.status", 
+		"session.idle", 
+		"message.updated", 
+		"message.part.updated", 
+		"question.asked", 
+		"permission.asked"
+	]
+	if (!handledTypes.includes(ev.type)) {
+		log("warn", "🔍 Unhandled OpenCode event type", {
+			type: ev.type,
+			sessionId,
+			propertiesKeys: ev.properties ? Object.keys(ev.properties) : [],
+			properties: ev.properties,
 		})
 	}
 }
