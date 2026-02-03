@@ -237,28 +237,29 @@ export async function activateDeviceByNumberOrName(
       }
     }
     
-    // Check if selected device is stale
-    const staleThreshold = icloud.HEARTBEAT_TIMEOUT_MS
-    const isSelectedStale = device.lastSeenAgo > staleThreshold
+    // Check if selected device is stale (convert to seconds for consistent comparison)
+    const staleThresholdSec = icloud.HEARTBEAT_TIMEOUT_MS / 1000
+    const lastSeenSeconds = Math.floor(device.lastSeenAgo / 1000)
+    const isSelectedStale = lastSeenSeconds > staleThresholdSec
     
     if (isSelectedStale) {
-      const staleSeconds = Math.floor(device.lastSeenAgo / 1000)
       return {
         success: false,
-        message: `❌ Device #${deviceNumber} "${device.name}" is stale (last seen ${staleSeconds}s ago, timeout ${staleThreshold/1000}s). Use /dev to see active devices.`,
+        message: `❌ Device #${deviceNumber} "${device.name}" is stale (last seen ${lastSeenSeconds}s ago, timeout ${staleThresholdSec}s). Use /dev to see active devices.`,
       }
     }
     
     // Check if there's a stale active device that would cause inconsistency
     const activeDevice = statusResult.devices.find(d => d.isActive)
-    if (activeDevice) {
+    if (activeDevice && activeDevice.name !== device.name) {
+      const heartbeatAgeSeconds = Math.floor((activeDevice.heartbeatAge || 0) / 1000)
       const activeIsStale = activeDevice.heartbeatAge !== undefined && 
-                            activeDevice.heartbeatAge > staleThreshold
+                            heartbeatAgeSeconds > staleThresholdSec
       
-      if (activeIsStale && activeDevice.name !== device.name) {
+      if (activeIsStale) {
         return {
           success: false,
-          message: `❌ Active device "${activeDevice.name}" has stale heartbeat. Wait for failover or restart the stale device first.`,
+          message: `❌ Active device "${activeDevice.name}" has stale heartbeat (${heartbeatAgeSeconds}s ago). Wait for failover or restart the stale device first.`,
         }
       }
     }
@@ -285,27 +286,29 @@ export async function activateDeviceByNumberOrName(
       const device = statusResult.devices.find(d => d.name === selection)
       
       if (device) {
-        const staleThreshold = icloud.HEARTBEAT_TIMEOUT_MS
-        const isSelectedStale = device.lastSeenAgo > staleThreshold
+        // Check if selected device is stale (convert to seconds for consistent comparison)
+        const staleThresholdSec = icloud.HEARTBEAT_TIMEOUT_MS / 1000
+        const lastSeenSeconds = Math.floor(device.lastSeenAgo / 1000)
+        const isSelectedStale = lastSeenSeconds > staleThresholdSec
         
         if (isSelectedStale) {
-          const staleSeconds = Math.floor(device.lastSeenAgo / 1000)
           return {
             success: false,
-            message: `❌ Device "${selection}" is stale (last seen ${staleSeconds}s ago, timeout ${staleThreshold/1000}s). Use /dev to see active devices.`,
+            message: `❌ Device "${selection}" is stale (last seen ${lastSeenSeconds}s ago, timeout ${staleThresholdSec}s). Use /dev to see active devices.`,
           }
         }
         
         // Check if there's a stale active device that would cause inconsistency
         const activeDevice = statusResult.devices.find(d => d.isActive)
-        if (activeDevice) {
+        if (activeDevice && activeDevice.name !== device.name) {
+          const heartbeatAgeSeconds = Math.floor((activeDevice.heartbeatAge || 0) / 1000)
           const activeIsStale = activeDevice.heartbeatAge !== undefined && 
-                                activeDevice.heartbeatAge > staleThreshold
+                                heartbeatAgeSeconds > staleThresholdSec
           
-          if (activeIsStale && activeDevice.name !== device.name) {
+          if (activeIsStale) {
             return {
               success: false,
-              message: `❌ Active device "${activeDevice.name}" has stale heartbeat. Wait for failover or restart the stale device first.`,
+              message: `❌ Active device "${activeDevice.name}" has stale heartbeat (${heartbeatAgeSeconds}s ago). Wait for failover or restart the stale device first.`,
             }
           }
         }
