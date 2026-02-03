@@ -382,6 +382,7 @@ async function main() {
 		{ command: "review", description: "Review changes [commit|branch|pr]" },
 		{ command: "rename", description: "Rename the session" },
 		{ command: "cap", description: "Capture bash command output" },
+		{ command: "ps", description: "Show running bash processes" },
 		{ command: "version", description: "Show mirror bot version" },
 		{ command: "dev", description: "List all devices" },
 		{ command: "use", description: "Activate device by number" },
@@ -1138,6 +1139,16 @@ async function handleTelegramMessage(
 			log("error", "Failed to send version response", {
 				error: sendResult.error.message,
 			})
+		}
+		return
+	}
+
+	if (messageText?.trim() === "/ps") {
+		log("info", "Received /ps command")
+		if (state.runningBashProcess) {
+			await state.telegram.sendMessage(`🔄 Running bash process (PID: ${state.runningBashProcess.pid})`)
+		} else {
+			await state.telegram.sendMessage("No running bash processes")
 		}
 		return
 	}
