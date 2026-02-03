@@ -23,8 +23,7 @@ if [ -d ".jj" ]; then
 elif [ -d ".git" ]; then
     VCS="git"
 else
-    echo "❌ Error: No .jj or .git directory found"
-    exit 1
+    VCS="none"
 fi
 
 echo "Detected VCS: $VCS"
@@ -81,16 +80,20 @@ else
     echo "Log tail:"
     tail -20 "$LOG_FILE"
     echo ""
-    echo "Rolling back to previous commit..."
     
-    # Rollback: Create new commit based on parent
+    # Rollback if VCS available
     if [ "$VCS" = "jj" ]; then
+        echo "Rolling back to previous commit..."
         jj new @-
-    else
+        echo "Rolled back to parent commit"
+    elif [ "$VCS" = "git" ]; then
+        echo "Rolling back to previous commit..."
         git reset --hard HEAD~1
+        echo "Rolled back to parent commit"
+    else
+        echo "No VCS found, skipping rollback"
     fi
     
-    echo "Rolled back to parent commit"
     echo "Attempting restart with rolled-back code..."
     
     # Recursive restart with new working copy
