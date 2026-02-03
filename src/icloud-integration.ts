@@ -240,7 +240,7 @@ export async function activateDeviceByNumberOrName(
     }
     
     // Check if selected device is stale (use appropriate timeout based on device state)
-    const isActiveDevice = device.name === statusResult.activeDevice
+    const isActiveDevice = device.isActive
     const staleThresholdSec = (isActiveDevice ? icloud.HEARTBEAT_TIMEOUT_MS : icloud.STANDBY_HEARTBEAT_TIMEOUT_MS) / 1000
     const lastSeenSeconds = Math.floor(device.lastSeenAgo / 1000)
     const isSelectedStale = lastSeenSeconds > staleThresholdSec
@@ -275,7 +275,7 @@ export async function activateDeviceByNumberOrName(
       
       if (device) {
         // Check if selected device is stale (use appropriate timeout based on device state)
-        const isActiveDevice = device.name === statusResult.activeDevice
+        const isActiveDevice = device.isActive
         const staleThresholdSec = (isActiveDevice ? icloud.HEARTBEAT_TIMEOUT_MS : icloud.STANDBY_HEARTBEAT_TIMEOUT_MS) / 1000
         const lastSeenSeconds = Math.floor(device.lastSeenAgo / 1000)
         const isSelectedStale = lastSeenSeconds > staleThresholdSec
