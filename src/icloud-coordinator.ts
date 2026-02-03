@@ -78,7 +78,7 @@ export const RANDOMIZATION = {
   FAILOVER_JITTER_MS: 10000,          // 0-10 seconds random delay
   
   // Heartbeat timeout (when to consider device stale)
-  HEARTBEAT_TIMEOUT_MS: 90000,        // 90 seconds (must be > max active heartbeat interval)
+  HEARTBEAT_TIMEOUT_MS: 120000,       // 120 seconds (must be > max active heartbeat interval, allows for iCloud sync delays)
   STANDBY_HEARTBEAT_TIMEOUT_MS: 450000, // 7.5 minutes (must be > max standby heartbeat interval)
   
   // Security: max foreign chat IDs to track
