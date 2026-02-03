@@ -830,22 +830,30 @@ async function pollFromDO(state: BotState): Promise<TelegramUpdate[]> {
 	
 	// Handle foreign chat attempts
 	if (foreignChatIds.size > 0 && state.useICloudCoordination) {
+		let newForeignAdded = false
+		
 		for (const chatId of foreignChatIds) {
 			log("warn", "Ignoring message from foreign chat", {
 				foreignChatId: chatId,
 				expectedChatId: state.chatId,
 			})
-			await ICloudCoordination.addForeignChatId(chatId, log)
+			const addResult = await ICloudCoordination.addForeignChatId(chatId, log)
+			if (addResult.status === "ok") {
+				newForeignAdded = true
+			}
 		}
 		
-		const allForeignResult = await ICloudCoordination.getForeignChatIds(log)
-		if (allForeignResult.status === "ok") {
-			const allForeign = allForeignResult.value
-			const foreignList = allForeign.map(id => `• ${id}`).join("\n")
-			await state.telegram.sendMessage(
-				`⚠️ Warning: This bot received messages from foreign chat IDs:\n\n${foreignList}\n\n` +
-				`This bot only responds to configured chat (ID: ${state.chatId}).`
-			)
+		// Only send warning when NEW foreign chat IDs are detected
+		if (newForeignAdded) {
+			const allForeignResult = await ICloudCoordination.getForeignChatIds(log)
+			if (allForeignResult.status === "ok") {
+				const allForeign = allForeignResult.value
+				const foreignList = allForeign.map(id => `• ${id}`).join("\n")
+				await state.telegram.sendMessage(
+					`⚠️ Warning: This bot received messages from foreign chat IDs:\n\n${foreignList}\n\n` +
+					`This bot only responds to configured chat (ID: ${state.chatId}).`
+				)
+			}
 		}
 	}
 
@@ -901,24 +909,30 @@ async function pollFromTelegram(state: BotState): Promise<TelegramUpdate[]> {
 	
 	// Handle foreign chat attempts
 	if (foreignChatIds.size > 0 && state.useICloudCoordination) {
-		// Add each foreign chat ID to iCloud state
+		let newForeignAdded = false
+		
 		for (const chatId of foreignChatIds) {
 			log("warn", "Ignoring message from foreign chat", {
 				foreignChatId: chatId,
 				expectedChatId: state.chatId,
 			})
-			await ICloudCoordination.addForeignChatId(chatId, log)
+			const addResult = await ICloudCoordination.addForeignChatId(chatId, log)
+			if (addResult.status === "ok") {
+				newForeignAdded = true
+			}
 		}
 		
-		// Get all foreign chat IDs and send warning
-		const allForeignResult = await ICloudCoordination.getForeignChatIds(log)
-		if (allForeignResult.status === "ok") {
-			const allForeign = allForeignResult.value
-			const foreignList = allForeign.map(id => `• ${id}`).join("\n")
-			await state.telegram.sendMessage(
-				`⚠️ Warning: This bot received messages from foreign chat IDs:\n\n${foreignList}\n\n` +
-				`This bot only responds to configured chat (ID: ${state.chatId}).`
-			)
+		// Only send warning when NEW foreign chat IDs are detected
+		if (newForeignAdded) {
+			const allForeignResult = await ICloudCoordination.getForeignChatIds(log)
+			if (allForeignResult.status === "ok") {
+				const allForeign = allForeignResult.value
+				const foreignList = allForeign.map(id => `• ${id}`).join("\n")
+				await state.telegram.sendMessage(
+					`⚠️ Warning: This bot received messages from foreign chat IDs:\n\n${foreignList}\n\n` +
+					`This bot only responds to configured chat (ID: ${state.chatId}).`
+				)
+			}
 		}
 	}
 
