@@ -24,6 +24,8 @@ export interface OpenCodeServer {
   baseUrl: string
 }
 
+export const OPENCODE_TIMEOUT_MS = 30000  // 30 second timeout for API calls
+
 export class PortLookupError extends TaggedError("PortLookupError")<{
   message: string
   cause: unknown
@@ -162,8 +164,7 @@ export async function connectToServer(
 
   const fetchWithTimeout = (request: Request) =>
     fetch(request, {
-      // @ts-ignore - bun supports timeout
-      timeout: false,
+      signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
     })
 
   const client = createOpencodeClient({
@@ -270,8 +271,7 @@ export async function startServer(
   const baseUrl = `http://127.0.0.1:${port}`
   const fetchWithTimeout = (request: Request) =>
     fetch(request, {
-      // @ts-ignore - bun supports timeout
-      timeout: false,
+      signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
     })
 
   const client = createOpencodeClient({
@@ -311,4 +311,23 @@ export async function stopServer(): Promise<Result<void, ServerStartError>> {
   })
 
   return stopResult.map(() => undefined)
+}
+
+/**
+ * Restart the OpenCode server (kills old process and starts new one)
+ * Used when API calls timeout
+ */
+export async function restartServer(): Promise<Result<OpenCodeServer, DirectoryAccessError | PortLookupError | ServerStartError>> {
+  if (!server) {
+    return startServer(process.cwd())
+  }
+  
+  log("info", "Restarting OpenCode server due to timeout...")
+  
+  // Kill existing server
+  server.process?.kill()
+  server = null
+  
+  // Start fresh
+  return startServer(process.cwd())
 }
