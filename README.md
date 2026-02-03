@@ -1,3 +1,14 @@
+This is a fork of [ajoslin/opencode-telegram-mirror](https://github.com/ajoslin/opencode-telegram-mirror) by [utensil](https://github.com/utensil) with the following additional features:
+
+| Feature | Description |
+|---------|-------------|
+| **☁️ Multi-Device Sync** | Run mirrors on multiple Macs. iCloud keeps them in sync automatically |
+| **📱 Device Commands** | `/dev` to see all devices, `/use <num>` to switch between them |
+| **🔄 Safe Restart** | `/restart` restarts safely with automatic rollback if code breaks |
+| **🚀 Multi-Instance** | Start new mirrors in different directories with conflict detection |
+
+---
+
 # OpenCode Telegram Mirror
 
 A standalone bot that mirrors OpenCode sessions to Telegram topics, enabling collaborative AI-assisted coding conversations in Telegram.
