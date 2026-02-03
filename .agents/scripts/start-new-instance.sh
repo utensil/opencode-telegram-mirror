@@ -78,29 +78,50 @@ fi
 echo "✅ No conflicts found"
 echo ""
 
-# Prepare environment variables
-export USE_ICLOUD_COORDINATOR=true
+# Load config from file (same as bot does)
+CONFIG_HOME="${HOME}/.config/opencode"
+CONFIG_FILE="$CONFIG_HOME/telegram.json"
 
+if [ -f "$CONFIG_FILE" ]; then
+    echo "Loading config from $CONFIG_FILE..."
+    
+    # Parse JSON using bun (quick and available)
+    BOT_TOKEN=$(bun -e "console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE', 'utf-8')).botToken || '')")
+    CHAT_ID=$(bun -e "console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE', 'utf-8')).chatId || '')")
+    THREAD_ID=$(bun -e "console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE', 'utf-8')).threadId || '')")
+    
+    if [ -n "$BOT_TOKEN" ]; then
+        export TELEGRAM_BOT_TOKEN="$BOT_TOKEN"
+    fi
+    
+    if [ -n "$CHAT_ID" ]; then
+        export TELEGRAM_CHAT_ID="$CHAT_ID"
+    fi
+    
+    if [ -n "$THREAD_ID" ] && [ "$THREAD_ID" != "null" ]; then
+        export TELEGRAM_THREAD_ID="$THREAD_ID"
+    fi
+fi
+
+# Override with arguments if provided
 if [ -n "$THREAD_ID" ]; then
     export TELEGRAM_THREAD_ID="$THREAD_ID"
-    echo "Using thread ID: $THREAD_ID"
 fi
 
 if [ -n "$DEVICE_NAME" ]; then
     export DEVICE_NAME="$DEVICE_NAME"
-    echo "Using device name: $DEVICE_NAME"
 fi
 
 # Check required environment variables
 if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
     echo "❌ Error: TELEGRAM_BOT_TOKEN not set"
-    echo "Export it in your shell or set it in ~/.config/opencode/telegram.json"
+    echo "Set it in $CONFIG_FILE or export TELEGRAM_BOT_TOKEN"
     exit 1
 fi
 
 if [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
     echo "❌ Error: TELEGRAM_CHAT_ID not set"
-    echo "Export it in your shell or set it in ~/.config/opencode/telegram.json"
+    echo "Set it in $CONFIG_FILE or export TELEGRAM_CHAT_ID"
     exit 1
 fi
 
