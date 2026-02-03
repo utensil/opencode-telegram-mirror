@@ -197,7 +197,7 @@ interface BotState {
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
 	>;
-	runningBashProcess: any | null; // Track running bash process
+	runningBashProcesses: Map<number, { process: any; command: string; startTime: number }>; // Track multiple bash processes by PID
 }
 
 async function main() {
@@ -457,7 +457,7 @@ async function main() {
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
 		typingIndicators: new Map(),
-		runningBashProcess: null,
+		runningBashProcesses: new Map(),
 	}
 
 	if (initialThreadTitle && config.threadId) {
@@ -1145,8 +1145,11 @@ async function handleTelegramMessage(
 
 	if (messageText?.trim() === "/ps") {
 		log("info", "Received /ps command")
-		if (state.runningBashProcess) {
-			await state.telegram.sendMessage(`🔄 Running bash process (PID: ${state.runningBashProcess.pid})`)
+		if (state.runningBashProcesses.size > 0) {
+			const processes = Array.from(state.runningBashProcesses.entries())
+				.map(([pid, info]) => `• PID ${pid}: ${info.command}`)
+				.join('\n')
+			await state.telegram.sendMessage(`🔄 Running bash processes:\n${processes}`)
 		} else {
 			await state.telegram.sendMessage("No running bash processes")
 		}
@@ -1162,11 +1165,6 @@ async function handleTelegramMessage(
 		}
 		log("info", "Received /cap command", { bashCode })
 		
-		if (state.runningBashProcess) {
-			await state.telegram.sendMessage("❌ Another bash command is already running. Use /interrupt to stop it.")
-			return
-		}
-		
 		try {
 			const { spawn } = await import("node:child_process")
 			const process = spawn("bash", ["-c", bashCode], { 
@@ -1174,7 +1172,13 @@ async function handleTelegramMessage(
 				stdio: "pipe"
 			})
 			
-			state.runningBashProcess = process
+			const pid = process.pid!
+			state.runningBashProcesses.set(pid, {
+				process,
+				command: bashCode,
+				startTime: Date.now()
+			})
+			
 			let output = ""
 			let errorOutput = ""
 			
@@ -1187,7 +1191,7 @@ async function handleTelegramMessage(
 			})
 			
 			process.on("close", async (code) => {
-				state.runningBashProcess = null
+				state.runningBashProcesses.delete(pid)
 				const fullOutput = output + (errorOutput ? `\nSTDERR:\n${errorOutput}` : "")
 				if (code === 0) {
 					await state.telegram.sendMessage(`\`\`\`\n${fullOutput || "(no output)"}\`\`\``)
@@ -1198,15 +1202,14 @@ async function handleTelegramMessage(
 			
 			// 30 second timeout
 			setTimeout(() => {
-				if (state.runningBashProcess === process) {
+				if (state.runningBashProcesses.has(pid)) {
 					process.kill("SIGTERM")
-					state.runningBashProcess = null
+					state.runningBashProcesses.delete(pid)
 					state.telegram.sendMessage("❌ Command timed out after 30 seconds")
 				}
 			}, 30000)
 			
 		} catch (error: any) {
-			state.runningBashProcess = null
 			const errorMsg = error.message || String(error)
 			await state.telegram.sendMessage(`❌ Command failed:\n\`\`\`\n${errorMsg}\`\`\``)
 		}
@@ -1375,11 +1378,17 @@ async function handleTelegramMessage(
 	if (messageText?.trim() === "/interrupt") {
 		log("info", "Received /interrupt command")
 		
-		// Kill running bash process if any
-		if (state.runningBashProcess) {
-			state.runningBashProcess.kill("SIGTERM")
-			state.runningBashProcess = null
-			await state.telegram.sendMessage("✅ Interrupted running bash command")
+		// Kill all running bash processes
+		if (state.runningBashProcesses.size > 0) {
+			const pids = Array.from(state.runningBashProcesses.keys())
+			for (const pid of pids) {
+				const info = state.runningBashProcesses.get(pid)
+				if (info) {
+					info.process.kill("SIGTERM")
+					state.runningBashProcesses.delete(pid)
+				}
+			}
+			await state.telegram.sendMessage(`✅ Interrupted ${pids.length} running bash command(s)`)
 			return
 		}
 		
