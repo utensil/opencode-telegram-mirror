@@ -175,6 +175,9 @@ interface BotState {
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
 	>;
+
+	// Security: track last foreign chat warning to avoid spam
+	lastForeignChatWarning: number;
 }
 
 async function main() {
@@ -359,6 +362,7 @@ async function main() {
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
 		typingIndicators: new Map(),
+		lastForeignChatWarning: 0,
 	}
 
 	if (initialThreadTitle && config.threadId) {
@@ -811,9 +815,39 @@ async function pollFromDO(state: BotState): Promise<TelegramUpdate[]> {
 	}
 	// DO wraps Telegram updates in { payload: {...}, update_id, chat_id, received_at }
 	// Extract the actual Telegram update from payload
-	const updates = (data.updates ?? []).map(
+	const allUpdates = (data.updates ?? []).map(
 		(u) => u.payload ?? u
 	) as TelegramUpdate[]
+	
+	// Filter to our chat and track foreign chats
+	const updates: TelegramUpdate[] = []
+	let lastForeignChatId: number | null = null
+	
+	for (const update of allUpdates) {
+		const chatId = update.message?.chat.id || update.callback_query?.message?.chat.id
+		if (String(chatId) === state.chatId) {
+			updates.push(update)
+		} else if (chatId) {
+			lastForeignChatId = chatId
+		}
+	}
+	
+	// Warn about foreign chat attempts (throttled to avoid spam)
+	if (lastForeignChatId !== null) {
+		log("warn", "Ignoring message from foreign chat", {
+			foreignChatId: lastForeignChatId,
+			expectedChatId: state.chatId,
+		})
+		
+		const now = Date.now()
+		if (now - state.lastForeignChatWarning > 5 * 60 * 1000) {
+			await state.telegram.sendMessage(
+				`⚠️ Warning: Received messages from another chat (ID: ${lastForeignChatId}). ` +
+				`This bot only responds to configured chat (ID: ${state.chatId}).`
+			)
+			state.lastForeignChatWarning = now
+		}
+	}
 
 	if (updates.length > 0) {
 		const lastUpdate = updates[updates.length - 1]
@@ -851,6 +885,8 @@ async function pollFromTelegram(state: BotState): Promise<TelegramUpdate[]> {
 
 	// Filter to our chat and update last ID
 	const updates: TelegramUpdate[] = []
+	let lastForeignChatId: number | null = null
+	
 	for (const update of data.result) {
 		setLastUpdateId(update.update_id, log)
 
@@ -858,6 +894,26 @@ async function pollFromTelegram(state: BotState): Promise<TelegramUpdate[]> {
 			update.message?.chat.id || update.callback_query?.message?.chat.id
 		if (String(chatId) === state.chatId) {
 			updates.push(update)
+		} else if (chatId) {
+			lastForeignChatId = chatId
+		}
+	}
+	
+	// Warn about foreign chat attempts (throttled to avoid spam)
+	if (lastForeignChatId !== null) {
+		log("warn", "Ignoring message from foreign chat", {
+			foreignChatId: lastForeignChatId,
+			expectedChatId: state.chatId,
+		})
+		
+		// Only send warning if we haven't warned in the last 5 minutes
+		const now = Date.now()
+		if (now - state.lastForeignChatWarning > 5 * 60 * 1000) {
+			await state.telegram.sendMessage(
+				`⚠️ Warning: Received messages from another chat (ID: ${lastForeignChatId}). ` +
+				`This bot only responds to configured chat (ID: ${state.chatId}).`
+			)
+			state.lastForeignChatWarning = now
 		}
 	}
 
