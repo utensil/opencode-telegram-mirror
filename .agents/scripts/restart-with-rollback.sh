@@ -17,6 +17,18 @@
 
 set -euo pipefail
 
+# Detect VCS type (jj or git)
+if [ -d ".jj" ]; then
+    VCS="jj"
+elif [ -d ".git" ]; then
+    VCS="git"
+else
+    echo "❌ Error: No .jj or .git directory found"
+    exit 1
+fi
+
+echo "Detected VCS: $VCS"
+
 # Self-detach if we have a parent (called from bot)
 if [ -n "${RESTART_DETACHED:-}" ]; then
     # Already detached, continue normally
@@ -72,7 +84,11 @@ else
     echo "Rolling back to previous commit..."
     
     # Rollback: Create new commit based on parent
-    jj new @-
+    if [ "$VCS" = "jj" ]; then
+        jj new @-
+    else
+        git reset --hard HEAD~1
+    fi
     
     echo "Rolled back to parent commit"
     echo "Attempting restart with rolled-back code..."
