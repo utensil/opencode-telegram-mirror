@@ -137,8 +137,13 @@ export function formatPart(part: Part): string {
 
   if (part.type === "reasoning") {
     if (!part.text?.trim()) return ""
-    const truncated = part.text.length > 500 ? part.text.slice(0, 500) + "…" : part.text
-    return `> thinking: ${truncated}`
+    const MAX_SEGMENT = 500
+    if (part.text.length <= MAX_SEGMENT * 2) {
+      return `> thinking: ${part.text}`
+    }
+    const beginning = part.text.slice(0, MAX_SEGMENT)
+    const end = part.text.slice(-MAX_SEGMENT)
+    return `> thinking: ${beginning}…${end}`
   }
 
   if (part.type === "file") {
