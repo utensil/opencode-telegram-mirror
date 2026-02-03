@@ -137,16 +137,17 @@ export function formatPart(part: Part): string {
 
   if (part.type === "reasoning") {
     if (!part.text?.trim()) return ""
+    const cleanText = part.text.replace(/\n/g, ' ')
     const MAX_SEGMENT = 15
-    if (part.text.length <= MAX_SEGMENT * 2) {
-      return `> thinking: ${part.text}`
+    if (cleanText.length <= MAX_SEGMENT * 2) {
+      return `> thinking: ${cleanText}`
     }
-    const beginning = part.text.slice(0, MAX_SEGMENT)
-    const end = part.text.slice(-MAX_SEGMENT)
+    const beginning = cleanText.slice(0, MAX_SEGMENT)
+    const end = cleanText.slice(-MAX_SEGMENT)
     // Ensure no overlap between beginning and end segments
-    const midPoint = Math.floor(part.text.length / 2)
-    const safeBeginning = beginning.length > midPoint ? part.text.slice(0, midPoint) : beginning
-    const safeEnd = part.text.length - end.length < midPoint ? part.text.slice(midPoint) : end
+    const midPoint = Math.floor(cleanText.length / 2)
+    const safeBeginning = beginning.length > midPoint ? cleanText.slice(0, midPoint) : beginning
+    const safeEnd = cleanText.length - end.length < midPoint ? cleanText.slice(midPoint) : end
     return `> thinking: ${safeBeginning}…${safeEnd}`
   }
 
