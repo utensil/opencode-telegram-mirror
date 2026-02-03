@@ -1542,10 +1542,7 @@ async function subscribeToEvents(state: BotState) {
 
 		for await (const event of stream) {
 			try {
-				log("debug", "⚡ OpenCode event received", { 
-					type: event.type,
-					properties: JSON.stringify(event.properties, null, 2)
-				})
+				log("debug", "⚡ OpenCode event received", { type: event.type })
 				await handleOpenCodeEvent(state, event as OpenCodeEvent)
 			} catch (error) {
 				log("error", "Event error", { error: String(error) })
