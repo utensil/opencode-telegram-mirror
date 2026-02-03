@@ -256,7 +256,7 @@ export async function startServer(
 
   log("info", "Starting opencode serve", { directory, port })
 
-  const serverProcess = spawn(opencodePath, ["serve", "--port", port.toString()], {
+  const serverProcess = spawn(opencodePath, ["serve", "--port", port.toString(), "--log-level", "DEBUG"], {
     stdio: "pipe",
     detached: false,
     cwd: directory,
