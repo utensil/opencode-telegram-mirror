@@ -832,20 +832,19 @@ async function pollFromDO(state: BotState): Promise<TelegramUpdate[]> {
 		}
 	}
 	
-	// Warn about foreign chat attempts (throttled to avoid spam)
+	// Warn about foreign chat attempts
 	if (lastForeignChatId !== null) {
 		log("warn", "Ignoring message from foreign chat", {
 			foreignChatId: lastForeignChatId,
 			expectedChatId: state.chatId,
 		})
 		
-		const now = Date.now()
-		if (now - state.lastForeignChatWarning > 5 * 60 * 1000) {
+		if (state.lastForeignChatWarning === 0) {
 			await state.telegram.sendMessage(
 				`⚠️ Warning: Received messages from another chat (ID: ${lastForeignChatId}). ` +
 				`This bot only responds to configured chat (ID: ${state.chatId}).`
 			)
-			state.lastForeignChatWarning = now
+			state.lastForeignChatWarning = 1
 		}
 	}
 
@@ -899,21 +898,19 @@ async function pollFromTelegram(state: BotState): Promise<TelegramUpdate[]> {
 		}
 	}
 	
-	// Warn about foreign chat attempts (throttled to avoid spam)
+	// Warn about foreign chat attempts
 	if (lastForeignChatId !== null) {
 		log("warn", "Ignoring message from foreign chat", {
 			foreignChatId: lastForeignChatId,
 			expectedChatId: state.chatId,
 		})
 		
-		// Only send warning if we haven't warned in the last 5 minutes
-		const now = Date.now()
-		if (now - state.lastForeignChatWarning > 5 * 60 * 1000) {
+		if (state.lastForeignChatWarning === 0) {
 			await state.telegram.sendMessage(
 				`⚠️ Warning: Received messages from another chat (ID: ${lastForeignChatId}). ` +
 				`This bot only responds to configured chat (ID: ${state.chatId}).`
 			)
-			state.lastForeignChatWarning = now
+			state.lastForeignChatWarning = 1
 		}
 	}
 
