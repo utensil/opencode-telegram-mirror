@@ -247,6 +247,37 @@ async function main() {
 			baseUrl: server.baseUrl,
 			directory,
 		})
+
+		// Fetch server config
+		try {
+			const configResponse = await fetch(`${server.baseUrl}/config`)
+			if (configResponse.ok) {
+				const serverConfig = await configResponse.json()
+				log("info", "OpenCode server config", { config: serverConfig })
+			} else {
+				log("warn", "Failed to fetch server config", { 
+					status: configResponse.status,
+					statusText: configResponse.statusText 
+				})
+			}
+
+			// Fetch providers config
+			const providersResponse = await fetch(`${server.baseUrl}/config/providers`)
+			if (providersResponse.ok) {
+				const providersConfig = await providersResponse.json()
+				log("info", "OpenCode providers config", { 
+					providers: providersConfig.providers?.length || 0,
+					default: providersConfig.default 
+				})
+			} else {
+				log("warn", "Failed to fetch providers config", { 
+					status: providersResponse.status,
+					statusText: providersResponse.statusText 
+				})
+			}
+		} catch (error) {
+			log("warn", "Error fetching server config", { error: String(error) })
+		}
 	} else {
 		log("info", "Starting OpenCode server...")
 		const serverResult = await startServer(directory)
@@ -263,6 +294,37 @@ async function main() {
 			baseUrl: server.baseUrl,
 			directory,
 		})
+
+		// Fetch server config
+		try {
+			const configResponse = await fetch(`${server.baseUrl}/config`)
+			if (configResponse.ok) {
+				const serverConfig = await configResponse.json()
+				log("info", "OpenCode server config", { config: serverConfig })
+			} else {
+				log("warn", "Failed to fetch server config", { 
+					status: configResponse.status,
+					statusText: configResponse.statusText 
+				})
+			}
+
+			// Fetch providers config
+			const providersResponse = await fetch(`${server.baseUrl}/config/providers`)
+			if (providersResponse.ok) {
+				const providersConfig = await providersResponse.json()
+				log("info", "OpenCode providers config", { 
+					providers: providersConfig.providers?.length || 0,
+					default: providersConfig.default 
+				})
+			} else {
+				log("warn", "Failed to fetch providers config", { 
+					status: providersResponse.status,
+					statusText: providersResponse.statusText 
+				})
+			}
+		} catch (error) {
+			log("warn", "Error fetching server config", { error: String(error) })
+		}
 	}
 
 	// Initialize Telegram client for sending messages
