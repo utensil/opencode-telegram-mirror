@@ -162,14 +162,45 @@ export async function connectToServer(
     })
   }
 
-  const fetchWithTimeout = (request: Request) =>
-    fetch(request, {
-      signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
-    })
+  // Custom fetch with timeout and auto-restart
+  const fetchWithAutoRestart = async (request: Request): Promise<Response> => {
+    try {
+      return await fetch(request, {
+        signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
+      })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const isTimeout = errorMessage.includes("timeout") || 
+                        errorMessage.includes("AbortError") ||
+                        errorMessage.includes("ECONNRESET")
+      
+      if (isTimeout && server?.process) {
+        log("warn", "OpenCode API timeout, restarting server...", { error: errorMessage })
+        
+        // Kill existing server
+        server.process.kill()
+        server = null
+        
+        // Start fresh server
+        const startResult = await startServer(directory)
+        if (startResult.status === "error") {
+          throw new Error(`Failed to restart server: ${startResult.error.message}`)
+        }
+        
+        log("info", "Server restarted, retrying API call...")
+        
+        // Retry with new server
+        return await fetch(request, {
+          signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
+        })
+      }
+      throw error
+    }
+  }
 
   const client = createOpencodeClient({
     baseUrl,
-    fetch: fetchWithTimeout as typeof fetch,
+    fetch: fetchWithAutoRestart as typeof fetch,
     headers: authHeaders,
   })
 
@@ -269,14 +300,46 @@ export async function startServer(
   log("info", "Server ready", { directory, port })
 
   const baseUrl = `http://127.0.0.1:${port}`
-  const fetchWithTimeout = (request: Request) =>
-    fetch(request, {
-      signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
-    })
+  
+  // Custom fetch with timeout and auto-restart
+  const fetchWithAutoRestart = async (request: Request): Promise<Response> => {
+    try {
+      return await fetch(request, {
+        signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
+      })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const isTimeout = errorMessage.includes("timeout") || 
+                        errorMessage.includes("AbortError") ||
+                        errorMessage.includes("ECONNRESET")
+      
+      if (isTimeout && server?.process) {
+        log("warn", "OpenCode API timeout, restarting server...", { error: errorMessage })
+        
+        // Kill existing server
+        server.process.kill()
+        server = null
+        
+        // Start fresh server
+        const startResult = await startServer(directory)
+        if (startResult.status === "error") {
+          throw new Error(`Failed to restart server: ${startResult.error.message}`)
+        }
+        
+        log("info", "Server restarted, retrying API call...")
+        
+        // Retry with new server
+        return await fetch(request, {
+          signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
+        })
+      }
+      throw error
+    }
+  }
 
   const client = createOpencodeClient({
     baseUrl,
-    fetch: fetchWithTimeout as typeof fetch,
+    fetch: fetchWithAutoRestart as typeof fetch,
   })
 
   server = {
@@ -330,4 +393,46 @@ export async function restartServer(): Promise<Result<OpenCodeServer, DirectoryA
   
   // Start fresh
   return startServer(process.cwd())
+}
+
+/**
+ * Call an OpenCode API function with automatic restart on timeout.
+ * If the call times out or fails, restarts the server and retries once.
+ */
+export async function callWithRetry<T>(
+  fn: () => Promise<T>,
+  directory: string
+): Promise<Result<T, Error>> {
+  try {
+    return Result.ok(await fn())
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    
+    // Check if it's a timeout or connection error
+    const isTimeout = errorMessage.includes("timeout") || 
+                      errorMessage.includes("AbortError") ||
+                      errorMessage.includes("ECONNRESET") ||
+                      errorMessage.includes("connection")
+    
+    if (isTimeout) {
+      log("warn", "OpenCode API call failed, restarting server...", { error: errorMessage })
+      
+      // Restart the server
+      const restartResult = await restartServer()
+      if (restartResult.status === "error") {
+        return Result.err(new Error(`Failed to restart server: ${restartResult.error.message}`))
+      }
+      
+      log("info", "Server restarted, retrying API call...")
+      
+      // Retry the call
+      try {
+        return Result.ok(await fn())
+      } catch (retryError) {
+        return Result.err(retryError as Error)
+      }
+    }
+    
+    return Result.err(error as Error)
+  }
 }
