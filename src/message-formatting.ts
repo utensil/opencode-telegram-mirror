@@ -143,7 +143,11 @@ export function formatPart(part: Part): string {
     }
     const beginning = part.text.slice(0, MAX_SEGMENT)
     const end = part.text.slice(-MAX_SEGMENT)
-    return `> thinking: ${beginning}…${end}`
+    // Ensure no overlap between beginning and end segments
+    const midPoint = Math.floor(part.text.length / 2)
+    const safeBeginning = beginning.length > midPoint ? part.text.slice(0, midPoint) : beginning
+    const safeEnd = part.text.length - end.length < midPoint ? part.text.slice(midPoint) : end
+    return `> thinking: ${safeBeginning}…${safeEnd}`
   }
 
   if (part.type === "file") {
