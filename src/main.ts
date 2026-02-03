@@ -1072,6 +1072,7 @@ async function handleTelegramMessage(
 		spawn(".agents/scripts/start-new-instance.sh", [directory], {
 			detached: true,
 			stdio: "ignore",
+			env: process.env,
 		})
 		return
 	}
