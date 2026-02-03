@@ -565,12 +565,21 @@ async function startUpdatesPoller(state: BotState) {
 	let nextActiveHeartbeat = Date.now() + 
 		ICloudCoordination.getRandomizedActiveHeartbeatInterval()
 	
+	// Initialize cleanup timer (every 24 hours)
+	const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000 // 24 hours
+	let nextCleanup: number | null = null
+	
 	let wasActive = false
 
-	while (true) {
-		try {
-			pollCount++
-			const now = Date.now()
+		while (true) {
+			try {
+				pollCount++
+				const now = Date.now()
+				
+				// Initialize cleanup timer on first iteration
+				if (nextCleanup === null) {
+					nextCleanup = now + CLEANUP_INTERVAL_MS
+				}
 
 			// ═══════════════════════════════════════════════════════════
 			// Check if this device should be active (includes failover)
@@ -640,6 +649,15 @@ async function startUpdatesPoller(state: BotState) {
 					log("debug", "Active state heartbeat sent", {
 						nextIn: Math.round((nextActiveHeartbeat - now) / 1000) + "s",
 					})
+				}
+				
+				// Cleanup stale devices (every 24 hours)
+				if (now >= nextCleanup) {
+					const cleanupResult = await ICloudCoordination.cleanupStaleDevices(log)
+					if (cleanupResult.status === "ok" && cleanupResult.value > 0) {
+						log("info", "Cleaned up stale devices", { count: cleanupResult.value })
+					}
+					nextCleanup = now + CLEANUP_INTERVAL_MS
 				}
 			} else {
 				// STANDBY DEVICE: Slow heartbeats (5-6 min)

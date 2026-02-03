@@ -6,6 +6,8 @@
 import * as icloud from "./icloud-coordinator"
 import * as localDb from "./database"
 import type { LogFn } from "./log"
+import type { Result } from "better-result"
+import type { CoordinatorError } from "./icloud-coordinator"
 
 // Flag to enable/disable iCloud coordination
 const USE_ICLOUD = process.env.USE_ICLOUD_COORDINATOR !== "false" // Enabled by default
@@ -437,5 +439,15 @@ export function getRandomizedStandbyHeartbeatInterval(): number {
  */
 export function getRandomizedFailoverJitter(): number {
   return Math.random() * RANDOMIZATION.FAILOVER_JITTER_MS
+}
+
+/**
+ * Clean up stale device files (devices not seen for > 24 hours)
+ * Called periodically by active device
+ */
+export async function cleanupStaleDevices(
+  log: LogFn
+): Promise<Result<number, CoordinatorError>> {
+  return icloud.cleanupStaleDevices(log)
 }
 
