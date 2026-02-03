@@ -249,21 +249,6 @@ export async function activateDeviceByNumberOrName(
       }
     }
     
-    // Check if there's a stale active device that would cause inconsistency
-    const activeDevice = statusResult.devices.find(d => d.isActive)
-    if (activeDevice && activeDevice.name !== device.name) {
-      const heartbeatAgeSeconds = Math.floor((activeDevice.heartbeatAge || 0) / 1000)
-      const activeIsStale = activeDevice.heartbeatAge !== undefined && 
-                            heartbeatAgeSeconds > staleThresholdSec
-      
-      if (activeIsStale) {
-        return {
-          success: false,
-          message: `❌ Active device "${activeDevice.name}" has stale heartbeat (${heartbeatAgeSeconds}s ago). Wait for failover or restart the stale device first.`,
-        }
-      }
-    }
-    
     // Activate by device name
     const result = await icloud.activateDevice(device.name, log)
     
@@ -295,21 +280,6 @@ export async function activateDeviceByNumberOrName(
           return {
             success: false,
             message: `❌ Device "${selection}" is stale (last seen ${lastSeenSeconds}s ago, timeout ${staleThresholdSec}s). Use /dev to see active devices.`,
-          }
-        }
-        
-        // Check if there's a stale active device that would cause inconsistency
-        const activeDevice = statusResult.devices.find(d => d.isActive)
-        if (activeDevice && activeDevice.name !== device.name) {
-          const heartbeatAgeSeconds = Math.floor((activeDevice.heartbeatAge || 0) / 1000)
-          const activeIsStale = activeDevice.heartbeatAge !== undefined && 
-                                heartbeatAgeSeconds > staleThresholdSec
-          
-          if (activeIsStale) {
-            return {
-              success: false,
-              message: `❌ Active device "${activeDevice.name}" has stale heartbeat (${heartbeatAgeSeconds}s ago). Wait for failover or restart the stale device first.`,
-            }
           }
         }
       }
