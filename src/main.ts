@@ -704,7 +704,7 @@ async function startUpdatesPoller(state: BotState) {
 				
 				// Notify Telegram that this device is now active
 				const commitInfo = getCurrentCommitInfo()
-				await state.telegram.sendMessage(`✅ I'm alive and ready! On the following commit:
+				await state.telegram.sendMessage(`✅ Device "${state.deviceId}" is now ACTIVE and ready! On the following commit:
 
 ${commitInfo}`)
 			} else if (!isActive && wasActive) {
