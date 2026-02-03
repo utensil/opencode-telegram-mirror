@@ -173,7 +173,7 @@ interface BotState {
 	assistantMessageIds: Set<string>;
 	pendingParts: Map<string, Part[]>;
 	sentPartIds: Set<string>;
-	reasoningMessages?: Map<string, { messageId: number; content: string; lastUpdate: number }>;
+	reasoningMessages?: Map<string, { messageId: number; content: string; lastUpdate: number; timeoutId?: NodeJS.Timeout }>;
 	typingIndicators: Map<
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
@@ -1939,10 +1939,17 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 				}
 			} else {
 				// Update existing reasoning message
-				reasoningState.content = part.text || ""
+				reasoningState.content += part.text || ""
 				const now = Date.now()
+				
 				// Throttle updates to avoid rate limits (max once per 2 seconds)
 				if (now - reasoningState.lastUpdate > 2000) {
+					// Clear any pending timeout since we're sending now
+					if (reasoningState.timeoutId) {
+						clearTimeout(reasoningState.timeoutId)
+						reasoningState.timeoutId = undefined
+					}
+					
 					const formatted = formatPart({ ...part, text: reasoningState.content })
 					if (formatted.trim()) {
 						const editResult = await state.telegram.editMessage(
@@ -1954,6 +1961,25 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 							log("debug", "📝 Updated reasoning stream", { partId: part.id })
 						}
 					}
+				} else {
+					// Set timeout to send final update if no immediate send
+					if (reasoningState.timeoutId) {
+						clearTimeout(reasoningState.timeoutId)
+					}
+					reasoningState.timeoutId = setTimeout(async () => {
+						const formatted = formatPart({ ...part, text: reasoningState.content })
+						if (formatted.trim()) {
+							const editResult = await state.telegram.editMessage(
+								reasoningState.messageId,
+								formatted
+							)
+							if (editResult.status === "ok") {
+								reasoningState.lastUpdate = Date.now()
+								log("debug", "📝 Final reasoning update", { partId: part.id })
+							}
+						}
+						reasoningState.timeoutId = undefined
+					}, 2500)
 				}
 			}
 			state.sentPartIds.add(part.id)
