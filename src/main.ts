@@ -1527,7 +1527,7 @@ interface OpenCodeEvent {
 }
 
 async function subscribeToEvents(state: BotState) {
-	log("info", "Subscribing to OpenCode events")
+	log("info", "🔌 Subscribing to OpenCode events")
 
 	try {
 		const eventsResult = await state.server.client.event.subscribe(
@@ -1538,7 +1538,7 @@ async function subscribeToEvents(state: BotState) {
 		const stream = eventsResult.stream
 		if (!stream) throw new Error("No event stream")
 
-		log("info", "Event stream connected")
+		log("info", "✅ Event stream connected")
 
 		for await (const event of stream) {
 			try {
@@ -1579,7 +1579,7 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		const isInterrupted =
 			errorName === "MessageAbortedError" || errorText === "The operation was aborted."
 
-		log("error", "OpenCode session error", {
+		log("error", "❌ OpenCode session error", {
 			sessionId,
 			error: ev.properties,
 		})
@@ -1753,8 +1753,13 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 				if (formatted.trim()) {
 					const sendResult = await state.telegram.sendMessage(formatted)
 					if (sendResult.status === "error") {
-						log("error", "Failed to send formatted part", {
+						log("error", "❌ Failed to send formatted part", {
 							error: sendResult.error.message,
+						})
+					} else {
+						log("debug", "📤 Sent OpenCode response part", {
+							partType: part.type,
+							partId: part.id
 						})
 					}
 					state.sentPartIds.add(part.id)
@@ -1780,7 +1785,7 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 					const oldString = (input.oldString as string) || ""
 					const newString = (input.newString as string) || ""
 
-					log("debug", "Edit tool completed", {
+					log("debug", "📝 Edit tool completed", {
 						filePath,
 						hasOldString: !!oldString,
 						hasNewString: !!newString,
