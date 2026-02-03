@@ -301,6 +301,7 @@ async function main() {
 		{ command: "use", description: "Activate device by number" },
 		{ command: "restart", description: "Restart the active bot safely" },
 		{ command: "start", description: "Start a new mirror instance" },
+		{ command: "stop", description: "Stop a device by number or name" },
 	])
 	if (commandsResult.status === "error") {
 		log("warn", "Failed to set bot commands", { error: commandsResult.error.message })
@@ -1074,6 +1075,74 @@ async function handleTelegramMessage(
 			stdio: "ignore",
 			env: process.env,
 		})
+		return
+	}
+
+	const stopMatch = messageText?.trim().match(/^\/stop\s+(.+)$/)
+	if (stopMatch) {
+		const selection = stopMatch[1].trim()
+		
+		if (!selection) {
+			await state.telegram.sendMessage("Usage: /stop <number>\nExample: /stop 2")
+			return
+		}
+		
+		log("info", "Received /stop command", { selection })
+		
+		if (!state.useICloudCoordination) {
+			await state.telegram.sendMessage("❌ iCloud coordination is required for /stop")
+			return
+		}
+		
+		// Get device status to find device by number or name
+		const statusResult = await ICloudCoordination.getDeviceStatus(true, log)
+		
+		if (!statusResult.success || !statusResult.devices) {
+			await state.telegram.sendMessage("❌ Failed to get device list")
+			return
+		}
+		
+		// Find device by number or name
+		let targetDevice = statusResult.devices.find(d => d.number === parseInt(selection))
+		
+		if (!targetDevice) {
+			// Try matching by name (exact or partial)
+			targetDevice = statusResult.devices.find(d => 
+				d.name === selection || 
+				d.name.includes(selection)
+			)
+		}
+		
+		if (!targetDevice) {
+			await state.telegram.sendMessage(
+				`❌ Device "${selection}" not found. Use /dev to see available devices.`
+			)
+			return
+		}
+		
+		// Don't allow stopping the current device
+		if (targetDevice.isActive) {
+			await state.telegram.sendMessage(
+				`❌ Cannot stop the active device. Use /restart instead, or switch to another device first.`
+			)
+			return
+		}
+		
+		// Remove the device
+		const removeResult = await ICloudCoordination.removeDevice(targetDevice.name, log)
+		
+		if (removeResult.status === "ok" && removeResult.value.success) {
+			const killedMsg = removeResult.value.processKilled 
+				? "Process killed." 
+				: "Process was already stopped."
+			await state.telegram.sendMessage(
+				`✅ Stopped device "${targetDevice.name}".\n${killedMsg}`
+			)
+		} else {
+			await state.telegram.sendMessage(
+				`❌ Failed to stop device "${targetDevice.name}"`
+			)
+		}
 		return
 	}
 

@@ -713,3 +713,58 @@ export async function cleanupStaleDevices(
       }),
   })
 }
+
+/**
+ * Remove a specific device by name
+ * Returns success/failure and whether the process was killed
+ */
+export async function removeDevice(
+  deviceName: string,
+  log?: LogFn
+): Promise<Result<{ success: boolean; processKilled: boolean }, CoordinatorError>> {
+  return Result.tryPromise({
+    try: async () => {
+      const devicesResult = await readDevices(log)
+      
+      if (devicesResult.status === "error") {
+        return { success: false, processKilled: false }
+      }
+      
+      const devices = devicesResult.value
+      const device = devices[deviceName]
+      
+      if (!device) {
+        log?.("warn", "Device not found", { deviceName })
+        return { success: false, processKilled: false }
+      }
+      
+      // Try to kill the process
+      let processKilled = false
+      try {
+        process.kill(device.pid, 0) // Check if process exists
+        process.kill(device.pid, 9) // Kill it
+        processKilled = true
+        log?.("info", "Killed device process", { deviceName, pid: device.pid })
+      } catch {
+        log?.("info", "Device process not running or already dead", { deviceName, pid: device.pid })
+      }
+      
+      // Delete the device file
+      const filePath = getDeviceFilePath(deviceName)
+      try {
+        const { unlink } = await import("node:fs/promises")
+        await unlink(filePath)
+        log?.("info", "Removed device file", { deviceName })
+      } catch (error) {
+        log?.("warn", "Failed to remove device file", { deviceName, error: String(error) })
+      }
+      
+      return { success: true, processKilled }
+    },
+    catch: (error) =>
+      new CoordinatorError({
+        message: `Failed to remove device: ${String(error)}`,
+        cause: error,
+      }),
+  })
+}

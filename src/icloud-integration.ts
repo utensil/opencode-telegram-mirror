@@ -473,3 +473,13 @@ export async function getForeignChatIds(
   return icloud.getForeignChatIds(log)
 }
 
+/**
+ * Remove a device by name (kills process and deletes device file)
+ */
+export async function removeDevice(
+  deviceName: string,
+  log: LogFn
+): Promise<Result<{ success: boolean; processKilled: boolean }, CoordinatorError>> {
+  return icloud.removeDevice(deviceName, log)
+}
+
