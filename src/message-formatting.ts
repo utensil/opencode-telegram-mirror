@@ -138,7 +138,7 @@ export function formatPart(part: Part): string {
   if (part.type === "reasoning") {
     if (!part.text?.trim()) return ""
     const cleanText = part.text.replace(/\n/g, ' ')
-    const MAX_SEGMENT = 15
+    const MAX_SEGMENT = 30
     if (cleanText.length <= MAX_SEGMENT * 2) {
       return `> thinking: ${cleanText}`
     }
