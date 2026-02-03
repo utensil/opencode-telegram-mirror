@@ -16,6 +16,13 @@ import { createLogger } from "./log"
 
 const log = createLogger()
 
+// Callback for OpenCode restart notifications (set by main.ts)
+let onOpencodeRestart: ((message: string) => void) | null = null
+
+export function setOnOpencodeRestart(callback: (message: string) => void) {
+  onOpencodeRestart = callback
+}
+
 export interface OpenCodeServer {
   process: ChildProcess | null  // null when connecting to external server
   client: OpencodeClient
@@ -176,6 +183,7 @@ export async function connectToServer(
       
       if (isTimeout && server?.process) {
         log("warn", "OpenCode API timeout, restarting server...", { error: errorMessage })
+        onOpencodeRestart?.("⚠️ OpenCode was unresponsive, restarting...")
         
         // Kill existing server
         server.process.kill()
@@ -188,6 +196,7 @@ export async function connectToServer(
         }
         
         log("info", "Server restarted, retrying API call...")
+        onOpencodeRestart?.("✅ OpenCode restarted successfully")
         
         // Retry with new server
         return await fetch(request, {
@@ -315,6 +324,7 @@ export async function startServer(
       
       if (isTimeout && server?.process) {
         log("warn", "OpenCode API timeout, restarting server...", { error: errorMessage })
+        onOpencodeRestart?.("⚠️ OpenCode was unresponsive, restarting...")
         
         // Kill existing server
         server.process.kill()
@@ -327,6 +337,7 @@ export async function startServer(
         }
         
         log("info", "Server restarted, retrying API call...")
+        onOpencodeRestart?.("✅ OpenCode restarted successfully")
         
         // Retry with new server
         return await fetch(request, {
@@ -416,6 +427,7 @@ export async function callWithRetry<T>(
     
     if (isTimeout) {
       log("warn", "OpenCode API call failed, restarting server...", { error: errorMessage })
+      onOpencodeRestart?.("⚠️ OpenCode was unresponsive, restarting...")
       
       // Restart the server
       const restartResult = await restartServer()
@@ -424,6 +436,7 @@ export async function callWithRetry<T>(
       }
       
       log("info", "Server restarted, retrying API call...")
+      onOpencodeRestart?.("✅ OpenCode restarted successfully")
       
       // Retry the call
       try {

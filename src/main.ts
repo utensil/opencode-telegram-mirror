@@ -18,6 +18,7 @@ import {
 	connectToServer,
 	stopServer,
 	getServer,
+	setOnOpencodeRestart,
 	type OpenCodeServer,
 } from "./opencode"
 import { TelegramClient, type TelegramVoice } from "./telegram"
@@ -316,6 +317,13 @@ async function main() {
 		deviceId: coordination.deviceId,
 		useICloud: coordination.useICloud,
 		mode: coordination.useICloud ? "iCloud shared state" : "local database",
+	})
+
+	// Set up OpenCode restart notification
+	setOnOpencodeRestart((message: string) => {
+		telegram.sendMessage(message).catch((err) => {
+			log("error", "Failed to send OpenCode restart notification", { error: String(err) })
+		})
 	})
 
 	// Determine session ID
