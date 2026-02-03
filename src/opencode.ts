@@ -227,6 +227,26 @@ export async function connectToServer(
 export async function startServer(
   directory: string
 ): Promise<Result<OpenCodeServer, DirectoryAccessError | PortLookupError | ServerStartError>> {
+  // Log OpenCode debug paths before starting
+  try {
+    const { spawn } = await import("node:child_process")
+    const debugProcess = spawn("opencode", ["debug", "paths"], { 
+      stdio: ["ignore", "pipe", "pipe"] 
+    })
+    
+    let output = ""
+    debugProcess.stdout?.on("data", (data) => output += data.toString())
+    debugProcess.stderr?.on("data", (data) => output += data.toString())
+    
+    await new Promise((resolve) => {
+      debugProcess.on("close", () => resolve(void 0))
+    })
+    
+    log("info", "🔍 OpenCode debug paths", { output: output.trim() })
+  } catch (error) {
+    log("warn", "Failed to get OpenCode debug paths", { error: String(error) })
+  }
+
   // Reuse existing server if running
   if (server?.process && !server.process.killed) {
     log("info", "Reusing existing server", { directory, port: server.port })
