@@ -267,7 +267,8 @@ async function main() {
 				const providersConfig = await providersResponse.json()
 				log("info", "OpenCode providers config", { 
 					providers: providersConfig.providers?.length || 0,
-					default: providersConfig.default 
+					default: providersConfig.default,
+					providerDetails: providersConfig.providers 
 				})
 			} else {
 				log("warn", "Failed to fetch providers config", { 
@@ -295,7 +296,7 @@ async function main() {
 			directory,
 		})
 
-		// Fetch server config
+		// Fetch providers config
 		try {
 			const configResponse = await fetch(`${server.baseUrl}/config`)
 			if (configResponse.ok) {
@@ -314,7 +315,8 @@ async function main() {
 				const providersConfig = await providersResponse.json()
 				log("info", "OpenCode providers config", { 
 					providers: providersConfig.providers?.length || 0,
-					default: providersConfig.default 
+					default: providersConfig.default,
+					providerDetails: providersConfig.providers 
 				})
 			} else {
 				log("warn", "Failed to fetch providers config", { 
