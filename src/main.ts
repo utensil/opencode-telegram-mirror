@@ -682,6 +682,9 @@ async function startUpdatesPoller(state: BotState) {
 					ICloudCoordination.getRandomizedActiveHeartbeatInterval()
 				nextActiveHeartbeat = now + 
 					ICloudCoordination.getRandomizedActiveHeartbeatInterval()
+				
+				// Notify Telegram that this device is now active
+				await state.telegram.sendMessage(`✅ Device "${state.deviceId}" is now ACTIVE and ready`)
 			} else if (!isActive && wasActive) {
 				// Just became standby - reset to SLOW heartbeat
 				log("info", "🔴 Device became standby, switching to slow heartbeat", {

@@ -264,7 +264,7 @@ export async function activateDeviceByNumberOrName(
     
     return {
       success: true,
-      message: `✅ Device #${deviceNumber} "${device.name}" is now ACTIVE`,
+      message: `🔄 Handing over to device #${deviceNumber} "${device.name}". Waiting for activation...`,
     }
   } else {
     // Activate by full device name - get device status to check staleness
@@ -300,7 +300,7 @@ export async function activateDeviceByNumberOrName(
     
     return {
       success: true,
-      message: `✅ Device "${selection}" is now ACTIVE`,
+      message: `🔄 Handing over to device "${selection}". Waiting for activation...`,
     }
   }
 }
