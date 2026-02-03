@@ -1606,15 +1606,6 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		}
 	}
 
-	if (ev.type !== "session.updated") {
-		log("debug", "OpenCode event received", {
-			type: ev.type,
-			eventSessionId: sessionId,
-			stateSessionId: state.sessionId,
-			match: sessionId === state.sessionId,
-		})
-	}
-
 	if (!sessionId || sessionId !== state.sessionId) return
 
 	if (ev.type === "session.status") {
