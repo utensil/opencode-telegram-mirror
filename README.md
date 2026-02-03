@@ -2,8 +2,8 @@ This is a fork of [ajoslin/opencode-telegram-mirror](https://github.com/ajoslin/
 
 | Feature | Description |
 |---------|-------------|
-| **☁️ Multi-Device Sync** | Run mirrors on multiple Macs. iCloud keeps them in sync automatically |
-| **📱 Device Commands** | `/dev` to see all devices, `/use <num>` to switch between them |
+| **🔗 iCloud Sync** | Coordinate multiple Macs with iCloud, no central update server needed |
+| **🎮 Device Control** | `/dev` to list devices, `/use <num>` to switch between them |
 | **🔄 Safe Restart** | `/restart` restarts safely with automatic rollback if code breaks |
 | **🚀 Multi-Instance** | Start new mirrors in different directories with conflict detection |
 
