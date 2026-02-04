@@ -57,6 +57,7 @@ import {
 } from "./voice"
 import * as ICloudCoordination from "./icloud-integration"
 import { execSync } from "node:child_process"
+import * as yaml from "yaml"
 
 const log = createLogger()
 
@@ -274,7 +275,7 @@ async function main() {
 			const configResponse = await fetch(`${server.baseUrl}/config`)
 			if (configResponse.ok) {
 				const serverConfig = await configResponse.json()
-				log("info", "OpenCode server config", { config: serverConfig })
+				log("info", "OpenCode server config:\n" + yaml.stringify(serverConfig))
 			} else {
 				log("warn", "Failed to fetch server config", { 
 					status: configResponse.status,
@@ -286,11 +287,7 @@ async function main() {
 			const providersResponse = await fetch(`${server.baseUrl}/config/providers`)
 			if (providersResponse.ok) {
 				const providersConfig = await providersResponse.json()
-				log("info", "OpenCode providers config", { 
-					providers: providersConfig.providers?.length || 0,
-					default: providersConfig.default,
-					providerDetails: providersConfig.providers 
-				})
+				log("info", "OpenCode providers config:\n" + yaml.stringify(providersConfig))
 			} else {
 				log("warn", "Failed to fetch providers config", { 
 					status: providersResponse.status,
@@ -322,7 +319,7 @@ async function main() {
 			const configResponse = await fetch(`${server.baseUrl}/config`)
 			if (configResponse.ok) {
 				const serverConfig = await configResponse.json()
-				log("info", "OpenCode server config", { config: serverConfig })
+				log("info", "OpenCode server config:\n" + yaml.stringify(serverConfig))
 			} else {
 				log("warn", "Failed to fetch server config", { 
 					status: configResponse.status,
@@ -334,11 +331,7 @@ async function main() {
 			const providersResponse = await fetch(`${server.baseUrl}/config/providers`)
 			if (providersResponse.ok) {
 				const providersConfig = await providersResponse.json()
-				log("info", "OpenCode providers config", { 
-					providers: providersConfig.providers?.length || 0,
-					default: providersConfig.default,
-					providerDetails: providersConfig.providers 
-				})
+				log("info", "OpenCode providers config:\n" + yaml.stringify(providersConfig))
 			} else {
 				log("warn", "Failed to fetch providers config", { 
 					status: providersResponse.status,
