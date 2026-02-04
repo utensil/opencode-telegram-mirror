@@ -19,6 +19,7 @@ import {
 	stopServer,
 	getServer,
 	setOnOpencodeRestart,
+	setOnOpencodeStderr,
 	type OpenCodeServer,
 } from "./opencode"
 import { TelegramClient, type TelegramVoice } from "./telegram"
@@ -405,6 +406,13 @@ async function main() {
 	setOnOpencodeRestart((message: string) => {
 		telegram.sendMessage(message).catch((err) => {
 			log("error", "Failed to send OpenCode restart notification", { error: String(err) })
+		})
+	})
+
+	// Set up OpenCode stderr forwarding
+	setOnOpencodeStderr((message: string) => {
+		telegram.sendMessage(`🔴 ${message}`).catch((err) => {
+			log("error", "Failed to send OpenCode stderr message", { error: String(err) })
 		})
 	})
 

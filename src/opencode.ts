@@ -18,9 +18,14 @@ const log = createLogger()
 
 // Callback for OpenCode restart notifications (set by main.ts)
 let onOpencodeRestart: ((message: string) => void) | null = null
+let onOpencodeStderr: ((message: string) => void) | null = null
 
 export function setOnOpencodeRestart(callback: (message: string) => void) {
   onOpencodeRestart = callback
+}
+
+export function setOnOpencodeStderr(callback: (message: string) => void) {
+  onOpencodeStderr = callback
 }
 
 export interface OpenCodeServer {
@@ -300,7 +305,11 @@ export async function startServer(
   })
 
   serverProcess.stderr?.on("data", (data) => {
-    log("debug", "opencode stderr", { data: data.toString().trim().slice(0, 200) })
+    const stderrData = data.toString().trim()
+    log("debug", "opencode stderr", { data: stderrData.slice(0, 200) })
+    if (onOpencodeStderr) {
+      onOpencodeStderr(`OpenCode stderr: ${stderrData}`)
+    }
   })
 
   serverProcess.on("error", (error) => {
