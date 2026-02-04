@@ -1206,14 +1206,14 @@ async function handleTelegramMessage(
 				}
 			})
 			
-			// 30 second timeout
+			// 3 minute timeout
 			setTimeout(() => {
 				if (state.runningBashProcesses.has(pid)) {
 					process.kill("SIGTERM")
 					state.runningBashProcesses.delete(pid)
-					state.telegram.sendMessage("❌ Command timed out after 30 seconds")
+					state.telegram.sendMessage("❌ Command timed out after 3 minutes")
 				}
-			}, 30000)
+			}, 180000)
 			
 		} catch (error: any) {
 			const errorMsg = error.message || String(error)
