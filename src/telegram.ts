@@ -279,7 +279,11 @@ export class TelegramClient {
       const data = (await response.json()) as { ok: boolean }
 
       if (!data.ok) {
-        this.log("warn", "Edit with markdown failed, retrying plain", { messageId })
+        this.log("warn", "Edit with markdown failed, retrying plain", { 
+          messageId, 
+          error: data,
+          contentPreview: text.substring(0, 200)
+        })
         // Retry without markdown
         params.parse_mode = undefined
         const retryResponse = await fetch(`${this.baseUrl}/editMessageText`, {
