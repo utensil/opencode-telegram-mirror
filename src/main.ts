@@ -411,7 +411,7 @@ async function main() {
 
 	// Set up OpenCode stderr forwarding
 	setOnOpencodeStderr((message: string) => {
-		telegram.sendMessage(`🔴 ${message}`).catch((err) => {
+		telegram.sendMessage(`🔴 OpenCode Error:\n\`\`\`\n${message.replace('OpenCode stderr: ', '')}\n\`\`\``).catch((err) => {
 			log("error", "Failed to send OpenCode stderr message", { error: String(err) })
 		})
 	})
