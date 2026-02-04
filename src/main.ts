@@ -2335,8 +2335,15 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 								formatted
 							)
 							if (editResult.status === "ok") {
-								textState.lastUpdate = now
-								log("debug", "📝 Updated text stream (markdown)", { partId: part.id })
+								// Check if markdown failed during edit
+								if (!editResult.value.usedMarkdown) {
+									// Markdown failed - switch to buffering mode for remaining updates
+									textState.usedMarkdown = false
+									log("debug", "⚠️ Markdown failed during edit, switching to buffer mode", { partId: part.id })
+								} else {
+									textState.lastUpdate = now
+									log("debug", "📝 Updated text stream (markdown)", { partId: part.id })
+								}
 							}
 						}
 					} else {
@@ -2352,8 +2359,15 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 										formatted
 									)
 									if (editResult.status === "ok") {
-										textState.lastUpdate = Date.now()
-										log("debug", "📝 Delayed text update (markdown)", { partId: part.id })
+										// Check if markdown failed during edit
+										if (!editResult.value.usedMarkdown) {
+											// Markdown failed - switch to buffering mode for remaining updates
+											textState.usedMarkdown = false
+											log("debug", "⚠️ Markdown failed during delayed edit, switching to buffer mode", { partId: part.id })
+										} else {
+											textState.lastUpdate = Date.now()
+											log("debug", "📝 Delayed text update (markdown)", { partId: part.id })
+										}
 									}
 								}
 								textState.timeoutId = undefined

@@ -255,7 +255,7 @@ export class TelegramClient {
     messageId: number,
     text: string,
     options?: { replyMarkup?: InlineKeyboardMarkup }
-  ): Promise<TelegramResult<boolean>> {
+  ): Promise<TelegramResult<{ success: boolean; usedMarkdown: boolean }>> {
     this.log("debug", "Editing message", { messageId, textLength: text.length })
 
     const params: Record<string, unknown> = {
@@ -289,11 +289,11 @@ export class TelegramClient {
         })
         const retryData = (await retryResponse.json()) as { ok: boolean }
         this.log("debug", "Edit retry result", { messageId, ok: retryData.ok })
-        return Result.ok(retryData.ok)
+        return Result.ok({ success: retryData.ok, usedMarkdown: false })
       }
 
       this.log("debug", "Message edited successfully", { messageId })
-      return Result.ok(true)
+      return Result.ok({ success: true, usedMarkdown: true })
     } catch (error) {
       this.log("error", "Error editing message", { messageId, error: String(error) })
       return Result.err(new TelegramApiError({ cause: error }))
