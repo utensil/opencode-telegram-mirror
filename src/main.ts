@@ -2324,6 +2324,18 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 									log("debug", "📝 Finalized text stream with markdown", { partId: textPart.id })
 								}
 							}
+						} else {
+							// If we can't find the text part in existing, use the stored content
+							const formatted = textState.content
+							if (formatted.trim()) {
+								const editResult = await state.telegram.editMessage(
+									textState.messageId,
+									formatted
+								)
+								if (editResult.status === "ok") {
+									log("debug", "📝 Finalized text stream with stored content", { textKey })
+								}
+							}
 						}
 					}
 				}
