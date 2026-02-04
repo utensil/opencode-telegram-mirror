@@ -2236,8 +2236,9 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 			
 			let textState = state.textMessages.get(textKey)
 			if (!textState) {
+				// Only create initial message if we have substantial content to avoid plain text fallback
 				const formatted = formatPart(part)
-				if (formatted.trim()) {
+				if (formatted.trim() && formatted.length > 10) {
 					const sendResult = await state.telegram.sendMessage(formatted)
 					if (sendResult.status === "ok") {
 						textState = {
@@ -2248,11 +2249,34 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 						state.textMessages.set(textKey, textState)
 						log("debug", "📤 Started text stream", { partId: part.id })
 					}
+				} else {
+					// Buffer the content until we have enough for a proper message
+					textState = {
+						messageId: -1, // Placeholder - no message created yet
+						content: part.text || "",
+						lastUpdate: Date.now()
+					}
+					state.textMessages.set(textKey, textState)
+					log("debug", "📝 Buffering text content", { partId: part.id, contentLength: formatted.length })
 				}
 			} else {
 				// Update existing text message
 				textState.content = part.text || ""
 				const now = Date.now()
+				
+				// If we haven't created a message yet, check if we have enough content now
+				if (textState.messageId === -1) {
+					const formatted = formatPart({ ...part, text: textState.content })
+					if (formatted.trim() && formatted.length > 10) {
+						const sendResult = await state.telegram.sendMessage(formatted)
+						if (sendResult.status === "ok") {
+							textState.messageId = sendResult.value.message_id
+							textState.lastUpdate = now
+							log("debug", "📤 Created delayed text stream message", { partId: part.id })
+						}
+					}
+					return // Don't try to edit if we just created the message
+				}
 				
 				// Throttle updates to avoid rate limits (max once per 2 seconds)
 				if (now - textState.lastUpdate > 2000) {
