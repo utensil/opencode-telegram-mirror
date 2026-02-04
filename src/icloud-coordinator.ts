@@ -169,7 +169,7 @@ export async function readState(log?: LogFn): Promise<Result<CoordinatorState, C
         log?.("info", "Migrated state to include foreignChatIds")
       }
       
-      log?.("debug", "Read coordinator state", { activeDevice: state.activeDevice })
+      // log?.("debug", "Read coordinator state", { activeDevice: state.activeDevice })
       return state
     },
     catch: (error) =>
