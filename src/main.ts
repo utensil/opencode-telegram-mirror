@@ -2268,6 +2268,12 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 				if (textState.messageId === -1) {
 					const formatted = formatPart({ ...part, text: textState.content })
 					if (formatted.trim() && formatted.length > 10) {
+						log("debug", "📤 Creating text message with content", { 
+							partId: part.id, 
+							contentLength: formatted.length,
+							contentPreview: formatted.substring(0, 100),
+							hasMarkdownChars: /[#*_`]/.test(formatted)
+						})
 						const sendResult = await state.telegram.sendMessage(formatted)
 						if (sendResult.status === "ok") {
 							textState.messageId = sendResult.value.message_id
