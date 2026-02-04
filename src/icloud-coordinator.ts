@@ -71,8 +71,8 @@ export const RANDOMIZATION = {
   STANDBY_HEARTBEAT_JITTER_MS: 60000, // +0-60 seconds = 5-6 minutes range
   
   // Standby device check interval (frequent - detect failures fast)
-  CHECK_BASE_MS: 30000,               // 30 seconds
-  CHECK_JITTER_MS: 10000,             // +0-10 seconds = 30-40s range
+  CHECK_BASE_MS: 5000,                // 5 seconds
+  CHECK_JITTER_MS: 2000,              // +0-2 seconds = 5-7s range
   
   // Failover attempt delay
   FAILOVER_JITTER_MS: 10000,          // 0-10 seconds random delay
