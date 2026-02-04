@@ -2325,15 +2325,23 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 								}
 							}
 						} else {
-							// If we can't find the text part in existing, use the stored content
-							const formatted = textState.content
+							// If we can't find the text part in existing, create a synthetic text part
+							// from the stored content and format it properly
+							const syntheticTextPart = {
+								type: "text" as const,
+								text: textState.content,
+								id: `synthetic-${textKey}`,
+								sessionID: key.split(':')[0],
+								messageID: key.split(':')[1]
+							}
+							const formatted = formatPart(syntheticTextPart as any)
 							if (formatted.trim()) {
 								const editResult = await state.telegram.editMessage(
 									textState.messageId,
 									formatted
 								)
 								if (editResult.status === "ok") {
-									log("debug", "📝 Finalized text stream with stored content", { textKey })
+									log("debug", "📝 Finalized text stream with synthetic part formatting", { textKey })
 								}
 							}
 						}
