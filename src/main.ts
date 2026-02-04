@@ -200,6 +200,7 @@ interface BotState {
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
 	>;
 	runningBashProcesses: Map<number, { process: any; command: string; startTime: number }>; // Track multiple bash processes by PID
+	selectedModel?: { providerID: string; modelID: string }; // Per-session model selection
 }
 
 async function main() {
@@ -351,6 +352,7 @@ async function main() {
 		{ command: "build", description: "Switch to build mode" },
 		{ command: "review", description: "Review changes [commit|branch|pr]" },
 		{ command: "rename", description: "Rename the session" },
+		{ command: "model", description: "Set AI model (provider/model)" },
 		{ command: "cap", description: "Capture bash command output" },
 		{ command: "ps", description: "Show running bash processes" },
 		{ command: "version", description: "Show mirror bot version" },
@@ -435,6 +437,7 @@ async function main() {
 		sentPartIds: new Set(),
 		typingIndicators: new Map(),
 		runningBashProcesses: new Map(),
+		selectedModel: undefined,
 	}
 
 	if (initialThreadTitle && config.threadId) {
@@ -562,6 +565,7 @@ Do not start implementing until you have clarity on what needs to be done.`
 				await state.server.client.session.prompt({
 					sessionID: state.sessionId,
 					parts: [{ type: "text", text: prompt }],
+					...(state.selectedModel && { model: state.selectedModel })
 				})
 				log("info", "Sent initial prompt to OpenCode")
 			}
@@ -1120,6 +1124,62 @@ async function handleTelegramMessage(
 		return
 	}
 
+	const modelMatch = messageText?.trim().match(/^\/model(?:\s+(.+))?$/)
+	if (modelMatch) {
+		const modelArg = modelMatch[1]?.trim()
+		
+		if (!modelArg) {
+			// Show current model
+			if (state.selectedModel) {
+				await state.telegram.sendMessage(`Current model: ${state.selectedModel.providerID}/${state.selectedModel.modelID}`)
+			} else {
+				await state.telegram.sendMessage("No model selected (using server default)")
+			}
+			return
+		}
+		
+		if (modelArg === "list") {
+			// Fetch and show available models
+			try {
+				const response = await fetch(`${state.server.baseUrl}/config/providers`)
+				if (response.ok) {
+					const config = await response.json()
+					const providers = config.providers || []
+					let modelList = "Available models:\n"
+					for (const provider of providers) {
+						const models = Object.keys(provider.models || {})
+						for (const model of models) {
+							modelList += `• ${provider.id}/${model}\n`
+						}
+					}
+					await state.telegram.sendMessage(modelList || "No models available")
+				} else {
+					await state.telegram.sendMessage("Failed to fetch available models")
+				}
+			} catch (error) {
+				await state.telegram.sendMessage("Error fetching models: " + String(error))
+			}
+			return
+		}
+		
+		if (modelArg === "reset") {
+			// Clear model selection
+			state.selectedModel = undefined
+			await state.telegram.sendMessage("✅ Model reset to server default")
+			return
+		}
+		
+		// Parse provider/model format
+		const [providerID, modelID] = modelArg.split("/")
+		if (providerID && modelID) {
+			state.selectedModel = { providerID, modelID }
+			await state.telegram.sendMessage(`✅ Model set to ${providerID}/${modelID}`)
+		} else {
+			await state.telegram.sendMessage("Usage: /model provider/model\nExample: /model openai/gpt-4\n\nOther commands:\n• /model - Show current\n• /model list - Show available\n• /model reset - Use server default")
+		}
+		return
+	}
+
 	if (messageText?.trim() === "/ps") {
 		log("info", "Received /ps command")
 		if (state.runningBashProcesses.size > 0) {
@@ -1646,6 +1706,7 @@ async function handleTelegramMessage(
 			sessionID: state.sessionId,
 			directory: state.directory,
 			parts,
+			...(state.selectedModel && { model: state.selectedModel })
 		})
 		.catch((err) => {
 			log("error", "Prompt failed", { error: String(err) })
