@@ -283,18 +283,6 @@ async function main() {
 					statusText: configResponse.statusText 
 				})
 			}
-
-			// Fetch providers config
-			const providersResponse = await fetch(`${server.baseUrl}/config/providers`)
-			if (providersResponse.ok) {
-				const providersConfig = await providersResponse.json()
-				log("info", "OpenCode providers config:\n" + yaml.stringify(providersConfig))
-			} else {
-				log("warn", "Failed to fetch providers config", { 
-					status: providersResponse.status,
-					statusText: providersResponse.statusText 
-				})
-			}
 		} catch (error) {
 			log("warn", "Error fetching server config", { error: String(error) })
 		}
@@ -325,18 +313,6 @@ async function main() {
 				log("warn", "Failed to fetch server config", { 
 					status: configResponse.status,
 					statusText: configResponse.statusText 
-				})
-			}
-
-			// Fetch providers config
-			const providersResponse = await fetch(`${server.baseUrl}/config/providers`)
-			if (providersResponse.ok) {
-				const providersConfig = await providersResponse.json()
-				log("info", "OpenCode providers config:\n" + yaml.stringify(providersConfig))
-			} else {
-				log("warn", "Failed to fetch providers config", { 
-					status: providersResponse.status,
-					statusText: providersResponse.statusText 
 				})
 			}
 		} catch (error) {
