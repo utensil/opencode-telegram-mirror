@@ -2275,6 +2275,35 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		// On step-finish, send remaining parts
 		if (part.type === "step-finish") {
 			stopTypingIndicator(key)
+			
+			// Finalize any streamed text messages with proper markdown formatting
+			if (state.textMessages) {
+				for (const [textKey, textState] of state.textMessages.entries()) {
+					if (textKey.startsWith(key + ":")) {
+						// Clear any pending timeout
+						if (textState.timeoutId) {
+							clearTimeout(textState.timeoutId)
+							textState.timeoutId = undefined
+						}
+						
+						// Find the corresponding text part to get final content
+						const textPart = existing.find(p => p.type === "text" && `${key}:text` === textKey)
+						if (textPart) {
+							const formatted = formatPart(textPart)
+							if (formatted.trim()) {
+								const editResult = await state.telegram.editMessage(
+									textState.messageId,
+									formatted
+								)
+								if (editResult.status === "ok") {
+									log("debug", "📝 Finalized text stream with markdown", { partId: textPart.id })
+								}
+							}
+						}
+					}
+				}
+			}
+			
 			for (const p of existing) {
 				if (p.type === "step-start" || p.type === "step-finish") continue
 				if (state.sentPartIds.has(p.id)) continue
