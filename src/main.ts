@@ -2035,6 +2035,14 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		if (!part) return
 
 		const key = `${part.sessionID}:${part.messageID}`
+		
+		// Auto-register assistant messages when we see parts from them
+		// This handles the case where parts arrive before message.updated events
+		if (!state.assistantMessageIds.has(key) && part.role === "assistant") {
+			state.assistantMessageIds.add(key)
+			log("debug", "Auto-registered assistant message from part", { key, partType: part.type })
+		}
+		
 		if (!state.assistantMessageIds.has(key)) {
 			log("debug", "Ignoring part - not from assistant message", {
 				key,
