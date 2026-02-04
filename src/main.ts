@@ -2311,6 +2311,13 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 				
 				// Only stream updates if markdown is being used successfully
 				// If markdown failed (usedMarkdown === false), buffer until finish
+				log("debug", "🔍 Checking if should stream update", {
+					partId: part.id,
+					usedMarkdown: textState.usedMarkdown,
+					timeSinceLastUpdate: now - textState.lastUpdate,
+					willStream: textState.usedMarkdown !== false
+				})
+				
 				if (textState.usedMarkdown !== false) {
 					// Throttle updates to avoid rate limits (max once per 2 seconds)
 					if (now - textState.lastUpdate > 2000) {
