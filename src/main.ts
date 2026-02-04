@@ -195,6 +195,7 @@ interface BotState {
 	pendingParts: Map<string, Part[]>;
 	sentPartIds: Set<string>;
 	reasoningMessages?: Map<string, { messageId: number; content: string; lastUpdate: number; timeoutId?: NodeJS.Timeout }>;
+	textMessages?: Map<string, { messageId: number; content: string; lastUpdate: number; timeoutId?: NodeJS.Timeout }>;
 	typingIndicators: Map<
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
@@ -2195,6 +2196,76 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 							}
 						}
 						reasoningState.timeoutId = undefined
+					}, 2500)
+				}
+			}
+			state.sentPartIds.add(part.id)
+		}
+
+		// Handle text parts with streaming updates (similar to reasoning)
+		if (part.type === "text") {
+			const textKey = `${key}:text`
+			if (!state.textMessages) {
+				state.textMessages = new Map()
+			}
+			
+			let textState = state.textMessages.get(textKey)
+			if (!textState) {
+				const formatted = formatPart(part)
+				if (formatted.trim()) {
+					const sendResult = await state.telegram.sendMessage(formatted)
+					if (sendResult.status === "ok") {
+						textState = {
+							messageId: sendResult.value.message_id,
+							content: part.text || "",
+							lastUpdate: Date.now()
+						}
+						state.textMessages.set(textKey, textState)
+						log("debug", "📤 Started text stream", { partId: part.id })
+					}
+				}
+			} else {
+				// Update existing text message
+				textState.content = part.text || ""
+				const now = Date.now()
+				
+				// Throttle updates to avoid rate limits (max once per 2 seconds)
+				if (now - textState.lastUpdate > 2000) {
+					// Clear any pending timeout since we're sending now
+					if (textState.timeoutId) {
+						clearTimeout(textState.timeoutId)
+						textState.timeoutId = undefined
+					}
+					
+					const formatted = formatPart({ ...part, text: textState.content })
+					if (formatted.trim()) {
+						const editResult = await state.telegram.editMessage(
+							textState.messageId,
+							formatted
+						)
+						if (editResult.status === "ok") {
+							textState.lastUpdate = now
+							log("debug", "📝 Updated text stream", { partId: part.id })
+						}
+					}
+				} else {
+					// Set timeout to send final update if no immediate send
+					if (textState.timeoutId) {
+						clearTimeout(textState.timeoutId)
+					}
+					textState.timeoutId = setTimeout(async () => {
+						const formatted = formatPart({ ...part, text: textState.content })
+						if (formatted.trim()) {
+							const editResult = await state.telegram.editMessage(
+								textState.messageId,
+								formatted
+							)
+							if (editResult.status === "ok") {
+								textState.lastUpdate = Date.now()
+								log("debug", "📝 Final text update", { partId: part.id })
+							}
+						}
+						textState.timeoutId = undefined
 					}, 2500)
 				}
 			}
