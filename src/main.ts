@@ -2320,7 +2320,8 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 				
 				if (textState.usedMarkdown !== false) {
 					// Throttle updates to avoid rate limits (max once per 2 seconds)
-					if (now - textState.lastUpdate > 2000) {
+					if (now - textState.lastUpdate >= 2000) {
+						// Enough time has passed - send update immediately
 						// Clear any pending timeout since we're sending now
 						if (textState.timeoutId) {
 							clearTimeout(textState.timeoutId)
@@ -2339,24 +2340,26 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 							}
 						}
 					} else {
-						// Set timeout to send final update if no immediate send
-						if (textState.timeoutId) {
-							clearTimeout(textState.timeoutId)
-						}
-						textState.timeoutId = setTimeout(async () => {
-							const formatted = formatPart({ ...part, text: textState.content })
-							if (formatted.trim()) {
-								const editResult = await state.telegram.editMessage(
-									textState.messageId,
-									formatted
-								)
-								if (editResult.status === "ok") {
-									textState.lastUpdate = Date.now()
-									log("debug", "📝 Final text update (markdown)", { partId: part.id })
+						// Too soon - set/keep timeout to send update after 2 seconds from last update
+						// Only create timeout if one doesn't exist yet
+						if (!textState.timeoutId) {
+							const delay = 2000 - (now - textState.lastUpdate)
+							textState.timeoutId = setTimeout(async () => {
+								const formatted = formatPart({ ...part, text: textState.content })
+								if (formatted.trim()) {
+									const editResult = await state.telegram.editMessage(
+										textState.messageId,
+										formatted
+									)
+									if (editResult.status === "ok") {
+										textState.lastUpdate = Date.now()
+										log("debug", "📝 Delayed text update (markdown)", { partId: part.id })
+									}
 								}
-							}
-							textState.timeoutId = undefined
-						}, 2500)
+								textState.timeoutId = undefined
+							}, delay)
+							log("debug", "⏰ Scheduled text update", { partId: part.id, delay })
+						}
 					}
 				} else {
 					// Markdown failed - buffer updates, don't stream partial content
