@@ -281,23 +281,26 @@ export async function startServer(
 
   log("info", "Starting opencode serve", { directory, port })
 
+  const serverEnv = {
+    ...process.env,
+    OPENCODE_CONFIG_CONTENT: JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      permissions: "allow",
+      lsp: false,
+      formatter: false,
+    }),
+  }
+
+  log("info", "OpenCode server environment variables:\n" + 
+    Object.entries(serverEnv)
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n'))
+
   const serverProcess = spawn(opencodePath, ["serve", "--port", port.toString(), "--log-level", "DEBUG"], {
     stdio: "pipe",
     detached: false,
     cwd: directory,
-    env: {
-      ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify({
-        $schema: "https://opencode.ai/config.json",
-        lsp: false,
-        formatter: false,
-        permission: {
-          edit: "allow",
-          bash: "allow",
-          webfetch: "allow",
-        },
-      } satisfies Config),
-    },
+    env: serverEnv,
   })
 
   serverProcess.stdout?.on("data", (data) => {
