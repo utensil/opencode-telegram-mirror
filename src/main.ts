@@ -2414,8 +2414,14 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 								if (editResult.status === "ok") {
 									log("debug", "📝 Finalized text stream", { 
 										partId: textPart.id,
-										wasBuffered: textState.usedMarkdown === false
+										wasBuffered: textState.usedMarkdown === false,
+										finalUsedMarkdown: editResult.value.usedMarkdown
 									})
+									if (!editResult.value.usedMarkdown) {
+										log("warn", "⚠️ Final edit failed markdown, message rendered as plain text", {
+											partId: textPart.id
+										})
+									}
 								}
 							}
 						} else {
@@ -2437,8 +2443,14 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 								if (editResult.status === "ok") {
 									log("debug", "📝 Finalized text stream with synthetic part formatting", { 
 										textKey,
-										wasBuffered: textState.usedMarkdown === false
+										wasBuffered: textState.usedMarkdown === false,
+										finalUsedMarkdown: editResult.value.usedMarkdown
 									})
+									if (!editResult.value.usedMarkdown) {
+										log("warn", "⚠️ Final synthetic edit failed markdown, message rendered as plain text", {
+											textKey
+										})
+									}
 								}
 							}
 						}
