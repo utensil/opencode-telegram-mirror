@@ -192,6 +192,7 @@ interface BotState {
 	becameActiveAt: number | null; // Timestamp when device became active
 
 	assistantMessageIds: Set<string>;
+	bufferedParts: Map<string, Part[]>; // Buffer parts until message is registered
 	pendingParts: Map<string, Part[]>;
 	sentPartIds: Set<string>;
 	reasoningMessages?: Map<string, { messageId: number; content: string; lastUpdate: number; timeoutId?: NodeJS.Timeout }>;
@@ -2021,6 +2022,26 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 			const key = `${info.sessionID}:${info.id}`
 			state.assistantMessageIds.add(key)
 			log("debug", "Registered assistant message", { key })
+			
+			// Process any buffered parts for this message
+			if (state.bufferedParts?.has(key)) {
+				const buffered = state.bufferedParts.get(key)!
+				state.bufferedParts.delete(key)
+				log("debug", "Processing buffered parts", { key, count: buffered.length })
+				
+				// Process each buffered part by creating synthetic events
+				for (const part of buffered) {
+					const syntheticEvent = {
+						type: "message.part.updated" as const,
+						properties: { part },
+						sessionId: part.sessionID,
+						timestamp: new Date().toISOString()
+					}
+					// Recursively call the event handler
+					await handleOpenCodeEvent(syntheticEvent, state)
+				}
+			}
+			
 			const entry = state.typingIndicators.get(key)
 			if (entry && entry.mode === "tool") {
 				if (entry.timeout) clearTimeout(entry.timeout)
@@ -2036,19 +2057,15 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 
 		const key = `${part.sessionID}:${part.messageID}`
 		
-		// Auto-register assistant messages when we see parts from them
-		// This handles the case where parts arrive before message.updated events
-		if (!state.assistantMessageIds.has(key) && part.role === "assistant") {
-			state.assistantMessageIds.add(key)
-			log("debug", "Auto-registered assistant message from part", { key, partType: part.type })
-		}
-		
 		if (!state.assistantMessageIds.has(key)) {
-			log("debug", "Ignoring part - not from assistant message", {
-				key,
-				registeredKeys: Array.from(state.assistantMessageIds),
-				partType: part.type,
-			})
+			// Buffer parts until message is registered
+			if (!state.bufferedParts) {
+				state.bufferedParts = new Map()
+			}
+			const buffered = state.bufferedParts.get(key) ?? []
+			buffered.push(part)
+			state.bufferedParts.set(key, buffered)
+			log("debug", "Buffered part until message registration", { key, partType: part.type })
 			return
 		}
 
