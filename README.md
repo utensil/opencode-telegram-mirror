@@ -3,10 +3,11 @@ This is a fork of [ajoslin/opencode-telegram-mirror](https://github.com/ajoslin/
 | Feature | Description |
 |---------|-------------|
 | **🔗 iCloud Sync** | Coordinate multiple Macs with iCloud, no central update server needed |
-| **🎮 Instance Control** | `/dev` to list instances, `/use <num>` to switch, `/start <dir>` to launch, `/stop` to stop |
-| **🔄 Smart Restart** | `/restart` restarts safely with rollback, `/upgrade` fetches and restarts automatically |
-| **🧠 Live Thinking** | Dynamic reasoning updates with concise formatting |
-| **🔍 Enhanced Debugging** | Improved error handling for OpenCode issues like quota limits and config problems |
+| **🎮 Instance Control** | `/dev` to list instances, `/use <num>` to switch, `/start <dir>` to launch, `/stop` to stop, 5s failover |
+| **🔄 Smart Restart** | `/restart` restarts safely with rollback, `/upgrade` fetches and restarts automatically, 3min timeouts |
+| **📱 Real-time Streaming** | Live text and reasoning updates with immediate feedback as AI responds |
+| **🤖 Model Selection** | `/model` commands for per-session AI model switching (GPT-4, Claude, etc.) |
+| **🔍 Enhanced Debugging** | OpenCode stderr forwarding, environment logging, YAML configs, and improved error handling |
 
 ---
 
