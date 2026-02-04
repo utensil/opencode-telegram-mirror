@@ -196,7 +196,7 @@ interface BotState {
 	pendingParts: Map<string, Part[]>;
 	sentPartIds: Set<string>;
 	reasoningMessages?: Map<string, { messageId: number; content: string; lastUpdate: number; timeoutId?: NodeJS.Timeout }>;
-	textMessages?: Map<string, { messageId: number; content: string; lastUpdate: number; timeoutId?: NodeJS.Timeout }>;
+	textMessages?: Map<string, { messageId: number; content: string; lastUpdate: number; timeoutId?: NodeJS.Timeout; usedMarkdown?: boolean }>;
 	typingIndicators: Map<
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
@@ -2241,13 +2241,33 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 				if (formatted.trim() && formatted.length > 10) {
 					const sendResult = await state.telegram.sendMessage(formatted)
 					if (sendResult.status === "ok") {
-						textState = {
-							messageId: sendResult.value.message_id,
-							content: part.text || "",
-							lastUpdate: Date.now()
+						// Check if markdown was successfully used
+						const usedMarkdown = sendResult.value.usedMarkdown !== false
+						
+						if (usedMarkdown) {
+							// Successfully sent as markdown - create state and start streaming
+							textState = {
+								messageId: sendResult.value.message_id,
+								content: part.text || "",
+								lastUpdate: Date.now(),
+								usedMarkdown: true
+							}
+							state.textMessages.set(textKey, textState)
+							log("debug", "📤 Started text stream (markdown)", { partId: part.id })
+						} else {
+							// Markdown failed - buffer this message until finish
+							textState = {
+								messageId: sendResult.value.message_id,
+								content: part.text || "",
+								lastUpdate: Date.now(),
+								usedMarkdown: false
+							}
+							state.textMessages.set(textKey, textState)
+							log("debug", "📦 Created message but will buffer updates (markdown failed)", { 
+								partId: part.id,
+								messageId: sendResult.value.message_id
+							})
 						}
-						state.textMessages.set(textKey, textState)
-						log("debug", "📤 Started text stream", { partId: part.id })
 					}
 				} else {
 					// Buffer the content until we have enough for a proper message
@@ -2257,7 +2277,7 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 						lastUpdate: Date.now()
 					}
 					state.textMessages.set(textKey, textState)
-					log("debug", "📝 Buffering text content", { partId: part.id, contentLength: formatted.length })
+					log("debug", "📝 Buffering text content (insufficient content)", { partId: part.id, contentLength: formatted.length })
 				}
 			} else {
 				// Update existing text message
@@ -2276,39 +2296,30 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 						})
 						const sendResult = await state.telegram.sendMessage(formatted)
 						if (sendResult.status === "ok") {
+							const usedMarkdown = sendResult.value.usedMarkdown !== false
 							textState.messageId = sendResult.value.message_id
 							textState.lastUpdate = now
-							log("debug", "📤 Created delayed text stream message", { partId: part.id })
+							textState.usedMarkdown = usedMarkdown
+							log("debug", "📤 Created delayed text stream message", { 
+								partId: part.id,
+								usedMarkdown
+							})
 						}
 					}
 					return // Don't try to edit if we just created the message
 				}
 				
-				// Throttle updates to avoid rate limits (max once per 2 seconds)
-				if (now - textState.lastUpdate > 2000) {
-					// Clear any pending timeout since we're sending now
-					if (textState.timeoutId) {
-						clearTimeout(textState.timeoutId)
-						textState.timeoutId = undefined
-					}
-					
-					const formatted = formatPart({ ...part, text: textState.content })
-					if (formatted.trim()) {
-						const editResult = await state.telegram.editMessage(
-							textState.messageId,
-							formatted
-						)
-						if (editResult.status === "ok") {
-							textState.lastUpdate = now
-							log("debug", "📝 Updated text stream", { partId: part.id })
+				// Only stream updates if markdown is being used successfully
+				// If markdown failed (usedMarkdown === false), buffer until finish
+				if (textState.usedMarkdown !== false) {
+					// Throttle updates to avoid rate limits (max once per 2 seconds)
+					if (now - textState.lastUpdate > 2000) {
+						// Clear any pending timeout since we're sending now
+						if (textState.timeoutId) {
+							clearTimeout(textState.timeoutId)
+							textState.timeoutId = undefined
 						}
-					}
-				} else {
-					// Set timeout to send final update if no immediate send
-					if (textState.timeoutId) {
-						clearTimeout(textState.timeoutId)
-					}
-					textState.timeoutId = setTimeout(async () => {
+						
 						const formatted = formatPart({ ...part, text: textState.content })
 						if (formatted.trim()) {
 							const editResult = await state.telegram.editMessage(
@@ -2316,12 +2327,36 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 								formatted
 							)
 							if (editResult.status === "ok") {
-								textState.lastUpdate = Date.now()
-								log("debug", "📝 Final text update", { partId: part.id })
+								textState.lastUpdate = now
+								log("debug", "📝 Updated text stream (markdown)", { partId: part.id })
 							}
 						}
-						textState.timeoutId = undefined
-					}, 2500)
+					} else {
+						// Set timeout to send final update if no immediate send
+						if (textState.timeoutId) {
+							clearTimeout(textState.timeoutId)
+						}
+						textState.timeoutId = setTimeout(async () => {
+							const formatted = formatPart({ ...part, text: textState.content })
+							if (formatted.trim()) {
+								const editResult = await state.telegram.editMessage(
+									textState.messageId,
+									formatted
+								)
+								if (editResult.status === "ok") {
+									textState.lastUpdate = Date.now()
+									log("debug", "📝 Final text update (markdown)", { partId: part.id })
+								}
+							}
+							textState.timeoutId = undefined
+						}, 2500)
+					}
+				} else {
+					// Markdown failed - buffer updates, don't stream partial content
+					log("debug", "📦 Buffering text update (markdown failed)", { 
+						partId: part.id,
+						contentLength: textState.content.length
+					})
 				}
 			}
 			state.sentPartIds.add(part.id)
@@ -2346,12 +2381,17 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 						if (textPart) {
 							const formatted = formatPart(textPart)
 							if (formatted.trim()) {
+								// If we buffered content because markdown failed, send final update
+								// This allows the complete message to render as plain text if it's not markdown
 								const editResult = await state.telegram.editMessage(
 									textState.messageId,
 									formatted
 								)
 								if (editResult.status === "ok") {
-									log("debug", "📝 Finalized text stream with markdown", { partId: textPart.id })
+									log("debug", "📝 Finalized text stream", { 
+										partId: textPart.id,
+										wasBuffered: textState.usedMarkdown === false
+									})
 								}
 							}
 						} else {
@@ -2371,7 +2411,10 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 									formatted
 								)
 								if (editResult.status === "ok") {
-									log("debug", "📝 Finalized text stream with synthetic part formatting", { textKey })
+									log("debug", "📝 Finalized text stream with synthetic part formatting", { 
+										textKey,
+										wasBuffered: textState.usedMarkdown === false
+									})
 								}
 							}
 						}

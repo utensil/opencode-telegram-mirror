@@ -134,7 +134,7 @@ export class TelegramClient {
       replyMarkup?: InlineKeyboardMarkup
       replyToMessageId?: number
     }
-  ): Promise<TelegramResult<TelegramMessage | null>> {
+  ): Promise<TelegramResult<TelegramMessage | null & { usedMarkdown?: boolean }>> {
     // Telegram has a 4096 character limit per message
     const maxLength = 4096
     const chunks = this.splitMessage(text, maxLength)
@@ -148,6 +148,7 @@ export class TelegramClient {
     })
 
     let lastMessage: TelegramMessage | null = null
+    let usedMarkdown = true // Track if we successfully used markdown
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]
@@ -203,6 +204,7 @@ export class TelegramClient {
 
           this.log("warn", "Markdown failed, retrying without parse_mode", { response: data, text: chunk })
           // Retry without markdown if it fails (markdown can be finicky)
+          usedMarkdown = false
           params.parse_mode = undefined
           const retryResponse = await fetch(`${this.baseUrl}/sendMessage`, {
             method: "POST",
@@ -236,7 +238,7 @@ export class TelegramClient {
     }
 
     if (lastMessage) {
-      return Result.ok(lastMessage)
+      return Result.ok({ ...lastMessage, usedMarkdown })
     }
 
     return Result.err(

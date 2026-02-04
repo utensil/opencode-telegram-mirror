@@ -132,6 +132,8 @@ function formatTodoList(part: Part): string {
 export function formatPart(part: Part): string {
   if (part.type === "text") {
     if (!part.text?.trim()) return ""
+    // For text parts, return as-is to preserve markdown formatting like # headers
+    // Don't escape markdown since we want headers, bold, etc. to render
     return part.text
   }
 
